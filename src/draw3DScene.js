@@ -10,47 +10,102 @@ export const draw3DScene = (gl, canvas) => {
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
 
-  // Define vertices for a 3D cube
-  const vertices = new Float32Array([
-    -0.5, -0.5, -0.5,
-     0.5, -0.5, -0.5,
-     0.5,  0.5, -0.5,
-    -0.5,  0.5, -0.5,
-    -0.5, -0.5,  0.5,
-     0.5, -0.5,  0.5,
-     0.5,  0.5,  0.5,
-    -0.5,  0.5,  0.5,
-  ]);
+  // Define unique vertices for each face (no sharing, so each face is a solid color)
+  const faceVertices = [
+    // Front face (red)
+    [-0.5, -0.5,  0.5],
+     [0.5, -0.5,  0.5],
+     [0.5,  0.5,  0.5],
+    [-0.5, -0.5,  0.5],
+     [0.5,  0.5,  0.5],
+    [-0.5,  0.5,  0.5],
 
-  const indices = new Uint16Array([
-    0, 1, 2, 0, 2, 3, // Front face
-    4, 5, 6, 4, 6, 7, // Back face
-    0, 1, 5, 0, 5, 4, // Bottom face
-    2, 3, 7, 2, 7, 6, // Top face
-    0, 3, 7, 0, 7, 4, // Left face
-    1, 2, 6, 1, 6, 5, // Right face
-  ]);
+    // Back face (green)
+    [-0.5, -0.5, -0.5],
+    [-0.5,  0.5, -0.5],
+     [0.5,  0.5, -0.5],
+    [-0.5, -0.5, -0.5],
+     [0.5,  0.5, -0.5],
+     [0.5, -0.5, -0.5],
+
+    // Top face (yellow)
+    [-0.5,  0.5, -0.5],
+    [-0.5,  0.5,  0.5],
+     [0.5,  0.5,  0.5],
+    [-0.5,  0.5, -0.5],
+     [0.5,  0.5,  0.5],
+     [0.5,  0.5, -0.5],
+
+    // Bottom face (blue)
+    [-0.5, -0.5, -0.5],
+     [0.5, -0.5, -0.5],
+     [0.5, -0.5,  0.5],
+    [-0.5, -0.5, -0.5],
+     [0.5, -0.5,  0.5],
+    [-0.5, -0.5,  0.5],
+
+    // Right face (cyan)
+     [0.5, -0.5, -0.5],
+     [0.5,  0.5, -0.5],
+     [0.5,  0.5,  0.5],
+     [0.5, -0.5, -0.5],
+     [0.5,  0.5,  0.5],
+     [0.5, -0.5,  0.5],
+
+    // Left face (magenta)
+    [-0.5, -0.5, -0.5],
+    [-0.5, -0.5,  0.5],
+    [-0.5,  0.5,  0.5],
+    [-0.5, -0.5, -0.5],
+    [-0.5,  0.5,  0.5],
+    [-0.5,  0.5, -0.5],
+  ];
+  const vertices = new Float32Array(faceVertices.flat());
+
+  // Per-face colors (same color for all 6 vertices of each face)
+  const faceColors = [
+    [1.0, 0.0, 0.0, 1.0], // Front: Red
+    [0.0, 1.0, 0.0, 1.0], // Back: Green
+    [1.0, 1.0, 0.0, 1.0], // Top: Yellow
+    [0.0, 0.0, 1.0, 1.0], // Bottom: Blue
+    [0.0, 1.0, 1.0, 1.0], // Right: Cyan
+    [1.0, 0.0, 1.0, 1.0], // Left: Magenta
+  ];
+  const colors = [];
+  for (let f = 0; f < 6; ++f) {
+    for (let v = 0; v < 6; ++v) {
+      colors.push(...faceColors[f]);
+    }
+  }
+  const colorArray = new Float32Array(colors);
 
   const vertexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
-  const indexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+  const colorBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, colorArray, gl.STATIC_DRAW);
+
+  // No index buffer needed, we use gl.drawArrays
 
   const vertexShaderSource = `
     attribute vec3 position;
+    attribute vec4 color;
+    varying vec4 vColor;
     uniform mat4 modelViewMatrix;
     uniform mat4 projectionMatrix;
     void main() {
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      vColor = color;
     }
   `;
 
   const fragmentShaderSource = `
+    precision mediump float;
+    varying vec4 vColor;
     void main() {
-      gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+      gl_FragColor = vColor;
     }
   `;
 
@@ -69,8 +124,14 @@ export const draw3DScene = (gl, canvas) => {
   gl.useProgram(program);
 
   const positionLocation = gl.getAttribLocation(program, 'position');
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.enableVertexAttribArray(positionLocation);
   gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+
+  const colorLocation = gl.getAttribLocation(program, 'color');
+  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+  gl.enableVertexAttribArray(colorLocation);
+  gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
 
   const modelViewMatrix = mat4.create();
   const projectionMatrix = mat4.create();
@@ -82,7 +143,7 @@ export const draw3DScene = (gl, canvas) => {
   gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
   gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix);
 
-  gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3);
 
   // Add a rotating animation to demonstrate 3D rendering
   let angle = 0;
@@ -92,7 +153,7 @@ export const draw3DScene = (gl, canvas) => {
     gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3);
 
     requestAnimationFrame(animate);
   }
