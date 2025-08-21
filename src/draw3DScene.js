@@ -216,7 +216,8 @@ export const draw3DScene = (gl, canvas) => {
     const trailProjectionMatrix = mat4.create();
     mat4.perspective(trailProjectionMatrix, Math.PI / 4, canvas.width / canvas.height, 0.1, 100.0);
     mat4.translate(trailModelViewMatrix, trailModelViewMatrix, [0, 0, -8.0]);
-    // No rotation for trail
+    // Rotate around the x-axis (longest axis)
+    mat4.rotate(trailModelViewMatrix, trailModelViewMatrix, angle, [1, 0, 0]);
 
     gl.uniformMatrix4fv(modelViewMatrixLocation, false, trailModelViewMatrix);
     gl.uniformMatrix4fv(projectionMatrixLocation, false, trailProjectionMatrix);
