@@ -10,7 +10,7 @@ export const draw3DScene = (gl, canvas) => {
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
 
-  // Define unique vertices for each face (no sharing, so each face is a solid color)
+  // Cube geometry (player)
   const faceVertices = [
     // Front face (red)
     [-0.5, -0.5,  0.5],
@@ -79,16 +79,17 @@ export const draw3DScene = (gl, canvas) => {
   }
   const colorArray = new Float32Array(colors);
 
+  // Trail state
+  let trailLength = 0.5;
+  let trailSpeed = 0.01;
+  let trailPos = [0, 0, 0];
+  let trailDir = [1, 0, 0];
+
+  // Vertex/Color buffer setup
   const vertexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
   const colorBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, colorArray, gl.STATIC_DRAW);
 
-  // No index buffer needed, we use gl.drawArrays
-
+  // Shader sources
   const vertexShaderSource = `
     attribute vec3 position;
     attribute vec4 color;
@@ -100,7 +101,6 @@ export const draw3DScene = (gl, canvas) => {
       vColor = color;
     }
   `;
-
   const fragmentShaderSource = `
     precision mediump float;
     varying vec4 vColor;
@@ -109,6 +109,7 @@ export const draw3DScene = (gl, canvas) => {
     }
   `;
 
+  // Shader/program setup
   const vertexShader = gl.createShader(gl.VERTEX_SHADER);
   gl.shaderSource(vertexShader, vertexShaderSource);
   gl.compileShader(vertexShader);
@@ -124,36 +125,113 @@ export const draw3DScene = (gl, canvas) => {
   gl.useProgram(program);
 
   const positionLocation = gl.getAttribLocation(program, 'position');
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.enableVertexAttribArray(positionLocation);
-  gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
-
   const colorLocation = gl.getAttribLocation(program, 'color');
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  gl.enableVertexAttribArray(colorLocation);
-  gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
-
-  const modelViewMatrix = mat4.create();
-  const projectionMatrix = mat4.create();
-  mat4.perspective(projectionMatrix, Math.PI / 4, canvas.width / canvas.height, 0.1, 100.0);
-  mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, -2.0]);
-
   const modelViewMatrixLocation = gl.getUniformLocation(program, 'modelViewMatrix');
   const projectionMatrixLocation = gl.getUniformLocation(program, 'projectionMatrix');
-  gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
-  gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix);
 
-  gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3);
-
-  // Add a rotating animation to demonstrate 3D rendering
+  // Animation state
   let angle = 0;
   function animate() {
     angle += 0.01;
-    mat4.rotate(modelViewMatrix, modelViewMatrix, angle, [0.5, 1.0, 0.0]);
-    gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
+    trailLength += trailSpeed;
+    // The start point is static at x=0, only the end grows forward
+    // Wobble left/right (y axis) as it grows (x axis)
+    const scale = 0.24; // 24% of original size (100% - 76%)
+    const halfHeight = 0.2 * scale;
+    const halfWidth = 0.2 * scale;
+    const x0 = 0;
+    const x1 = trailLength;
+    const wobble = Math.sin(trailLength * 2) * 1.5;
+    // Vertices for a stretched cube (trail)
+    const trailVertices = [
+      // Front face (white)
+      [x0, -halfHeight + wobble,  halfWidth],
+      [x1, -halfHeight + wobble,  halfWidth],
+      [x1,  halfHeight + wobble,  halfWidth],
+      [x0, -halfHeight + wobble,  halfWidth],
+      [x1,  halfHeight + wobble,  halfWidth],
+      [x0,  halfHeight + wobble,  halfWidth],
 
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3);
+      // Back face (gray)
+      [x0, -halfHeight + wobble, -halfWidth],
+      [x0,  halfHeight + wobble, -halfWidth],
+      [x1,  halfHeight + wobble, -halfWidth],
+      [x0, -halfHeight + wobble, -halfWidth],
+      [x1,  halfHeight + wobble, -halfWidth],
+      [x1, -halfHeight + wobble, -halfWidth],
+
+      // Top face (light gray)
+      [x0,  halfHeight + wobble, -halfWidth],
+      [x0,  halfHeight + wobble,  halfWidth],
+      [x1,  halfHeight + wobble,  halfWidth],
+      [x0,  halfHeight + wobble, -halfWidth],
+      [x1,  halfHeight + wobble,  halfWidth],
+      [x1,  halfHeight + wobble, -halfWidth],
+
+      // Bottom face (dark gray)
+      [x0, -halfHeight + wobble, -halfWidth],
+      [x1, -halfHeight + wobble, -halfWidth],
+      [x1, -halfHeight + wobble,  halfWidth],
+      [x0, -halfHeight + wobble, -halfWidth],
+      [x1, -halfHeight + wobble,  halfWidth],
+      [x0, -halfHeight + wobble,  halfWidth],
+
+      // Right face (blue)
+      [x1, -halfHeight + wobble, -halfWidth],
+      [x1,  halfHeight + wobble, -halfWidth],
+      [x1,  halfHeight + wobble,  halfWidth],
+      [x1, -halfHeight + wobble, -halfWidth],
+      [x1,  halfHeight + wobble,  halfWidth],
+      [x1, -halfHeight + wobble,  halfWidth],
+
+      // Left face (red)
+      [x0, -halfHeight + wobble, -halfWidth],
+      [x0, -halfHeight + wobble,  halfWidth],
+      [x0,  halfHeight + wobble,  halfWidth],
+      [x0, -halfHeight + wobble, -halfWidth],
+      [x0,  halfHeight + wobble,  halfWidth],
+      [x0,  halfHeight + wobble, -halfWidth],
+    ];
+    const trailVerticesFlat = new Float32Array(trailVertices.flat());
+
+    // Trail colors
+    const trailFaceColors = [
+      [1.0, 1.0, 1.0, 1.0], // Front: White
+      [0.5, 0.5, 0.5, 1.0], // Back: Gray
+      [0.8, 0.8, 0.8, 1.0], // Top: Light gray
+      [0.2, 0.2, 0.2, 1.0], // Bottom: Dark gray
+      [0.0, 0.0, 1.0, 1.0], // Right: Blue
+      [1.0, 0.0, 0.0, 1.0], // Left: Red
+    ];
+    const trailColors = [];
+    for (let f = 0; f < 6; ++f) {
+      for (let v = 0; v < 6; ++v) {
+        trailColors.push(...trailFaceColors[f]);
+      }
+    }
+    const trailColorArray = new Float32Array(trailColors);
+
+    // Model/view/projection for trail
+    const trailModelViewMatrix = mat4.create();
+    const trailProjectionMatrix = mat4.create();
+    mat4.perspective(trailProjectionMatrix, Math.PI / 4, canvas.width / canvas.height, 0.1, 100.0);
+    mat4.translate(trailModelViewMatrix, trailModelViewMatrix, [0, 0, -8.0]);
+    // No rotation for trail
+
+    gl.uniformMatrix4fv(modelViewMatrixLocation, false, trailModelViewMatrix);
+    gl.uniformMatrix4fv(projectionMatrixLocation, false, trailProjectionMatrix);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, trailVerticesFlat, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(positionLocation);
+    gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, trailColorArray, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(colorLocation);
+    gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLES, 0, trailVerticesFlat.length / 3);
 
     requestAnimationFrame(animate);
   }
