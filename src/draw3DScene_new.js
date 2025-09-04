@@ -48,31 +48,15 @@ export const draw3DScene = (gl, canvas) => {
   const vertexShader = gl.createShader(gl.VERTEX_SHADER);
   gl.shaderSource(vertexShader, vertexShaderSource);
   gl.compileShader(vertexShader);
-  
-  // Check vertex shader compilation
-  if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-    console.error('Vertex shader compilation error:', gl.getShaderInfoLog(vertexShader));
-  }
 
   const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
   gl.shaderSource(fragmentShader, fragmentShaderSource);
   gl.compileShader(fragmentShader);
-  
-  // Check fragment shader compilation
-  if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-    console.error('Fragment shader compilation error:', gl.getShaderInfoLog(fragmentShader));
-  }
 
   const program = gl.createProgram();
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
-  
-  // Check program linking
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program linking error:', gl.getProgramInfoLog(program));
-  }
-  
   gl.useProgram(program);
 
   const positionLocation = gl.getAttribLocation(program, 'position');
@@ -86,7 +70,7 @@ export const draw3DScene = (gl, canvas) => {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     const state = window.gameState;
-    if (!state) {
+    if (!state || !state.trail || state.trail.length < 2) {
       requestAnimationFrame(animate);
       return;
     }
@@ -96,49 +80,47 @@ export const draw3DScene = (gl, canvas) => {
     const vertices = [];
     const colors = [];
     
-    // Generate trail segments (only if we have at least 2 points)
-    if (state.trail && state.trail.length >= 2) {
-      for (let i = 0; i < state.trail.length - 1; i++) {
-        const current = state.trail[i];
-        const next = state.trail[i + 1];
-        
-        // Calculate perpendicular direction for trail width
-        const dx = next.x - current.x;
-        const dy = next.y - current.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        
-        if (length === 0) continue;
-        
-        const perpX = (-dy / length) * trailWidth;
-        const perpY = (dx / length) * trailWidth;
-        
-        // Create quad for this trail segment
-        // Triangle 1
-        vertices.push(
-          current.x - perpX, current.y - perpY, 0,
-          current.x + perpX, current.y + perpY, 0,
-          next.x - perpX, next.y - perpY, 0
-        );
-        
-        // Triangle 2
-        vertices.push(
-          current.x + perpX, current.y + perpY, 0,
-          next.x + perpX, next.y + perpY, 0,
-          next.x - perpX, next.y - perpY, 0
-        );
-        
-        // Color based on position in trail (newer = brighter)
-        const intensity = (i / state.trail.length) * 0.8 + 0.2;
-        const color = [intensity, intensity, intensity, 1.0];
-        
-        // Add colors for both triangles (6 vertices)
-        for (let j = 0; j < 6; j++) {
-          colors.push(...color);
-        }
+    // Generate trail segments
+    for (let i = 0; i < state.trail.length - 1; i++) {
+      const current = state.trail[i];
+      const next = state.trail[i + 1];
+      
+      // Calculate perpendicular direction for trail width
+      const dx = next.x - current.x;
+      const dy = next.y - current.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      
+      if (length === 0) continue;
+      
+      const perpX = (-dy / length) * trailWidth;
+      const perpY = (dx / length) * trailWidth;
+      
+      // Create quad for this trail segment
+      // Triangle 1
+      vertices.push(
+        current.x - perpX, current.y - perpY, 0,
+        current.x + perpX, current.y + perpY, 0,
+        next.x - perpX, next.y - perpY, 0
+      );
+      
+      // Triangle 2
+      vertices.push(
+        current.x + perpX, current.y + perpY, 0,
+        next.x + perpX, next.y + perpY, 0,
+        next.x - perpX, next.y - perpY, 0
+      );
+      
+      // Color based on position in trail (newer = brighter)
+      const intensity = (i / state.trail.length) * 0.8 + 0.2;
+      const color = [intensity, intensity, intensity, 1.0];
+      
+      // Add colors for both triangles (6 vertices)
+      for (let j = 0; j < 6; j++) {
+        colors.push(...color);
       }
     }
     
-    // Always draw snake head (current position)
+    // Draw snake head (current position)
     const headSize = 0.08;
     const headX = state.snakePosition.x;
     const headY = state.snakePosition.y;
@@ -160,7 +142,6 @@ export const draw3DScene = (gl, canvas) => {
       colors.push(...headColor);
     }
 
-    // Always render if we have any vertices (at minimum the head)
     if (vertices.length === 0) {
       requestAnimationFrame(animate);
       return;
