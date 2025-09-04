@@ -1,28 +1,51 @@
 import { initGame } from './src/initGame.js';
 
+// Function to generate random starting positions and angles for snakes
+function generateRandomStartingPosition() {
+  const viewSize = 10;
+  const canvas = document.getElementById('gameCanvas');
+  const aspect = canvas ? canvas.width / canvas.height : 16/9; // Default aspect ratio if canvas not ready
+  const horizontalBoundary = viewSize * aspect;
+  const verticalBoundary = viewSize;
+  
+  // Generate random position within safe bounds (not too close to edges)
+  const safeMargin = 1; // Keep snakes away from edges
+  const x = (Math.random() - 0.5) * 2 * (horizontalBoundary - safeMargin);
+  const y = (Math.random() - 0.5) * 2 * (verticalBoundary - safeMargin);
+  
+  // Generate random direction (0-360 degrees)
+  const direction = Math.random() * 360;
+  
+  return { x, y, direction };
+}
+
 initGame();
+
+// Generate random starting positions for both players
+const player1Start = generateRandomStartingPosition();
+const player2Start = generateRandomStartingPosition();
 
 // Snake game state with two players
 window.gameState = {
   gameOverLogged: false, // Flag to prevent multiple game over messages
   player1: {
-    snakePosition: { x: -2, y: 0 }, // Start on the left
-    snakeDirection: 0, // Direction in degrees (0 = right, 90 = up, 180 = left, 270 = down)
+    snakePosition: { x: player1Start.x, y: player1Start.y }, // Random starting position
+    snakeDirection: player1Start.direction, // Random starting direction
     snakeSpeed: 0.02, // Movement speed
     turnSpeed: 3, // Degrees per frame when turning
     isAlive: true,
-    trail: [{ x: -2, y: 0 }], // Trail points for collision detection
+    trail: [{ x: player1Start.x, y: player1Start.y }], // Trail points for collision detection
     isTurningLeft: false,
     isTurningRight: false,
     color: [1.0, 0.2, 0.2, 1.0] // Red color
   },
   player2: {
-    snakePosition: { x: 2, y: 0 }, // Start on the right
-    snakeDirection: 180, // Start facing left
+    snakePosition: { x: player2Start.x, y: player2Start.y }, // Random starting position
+    snakeDirection: player2Start.direction, // Random starting direction
     snakeSpeed: 0.02,
     turnSpeed: 3,
     isAlive: true,
-    trail: [{ x: 2, y: 0 }],
+    trail: [{ x: player2Start.x, y: player2Start.y }],
     isTurningLeft: false,
     isTurningRight: false,
     color: [0.2, 0.2, 1.0, 1.0] // Blue color
@@ -137,22 +160,26 @@ function resetGame() {
     return false;
   }
   
+  // Generate new random starting positions for both players
+  const player1Start = generateRandomStartingPosition();
+  const player2Start = generateRandomStartingPosition();
+  
   // Reset game state flags
   state.gameOverLogged = false;
   
-  // Reset player 1
-  state.player1.snakePosition = { x: -2, y: 0 };
-  state.player1.snakeDirection = 0;
+  // Reset player 1 with random position and direction
+  state.player1.snakePosition = { x: player1Start.x, y: player1Start.y };
+  state.player1.snakeDirection = player1Start.direction;
   state.player1.isAlive = true;
-  state.player1.trail = [{ x: -2, y: 0 }];
+  state.player1.trail = [{ x: player1Start.x, y: player1Start.y }];
   state.player1.isTurningLeft = false;
   state.player1.isTurningRight = false;
   
-  // Reset player 2
-  state.player2.snakePosition = { x: 2, y: 0 };
-  state.player2.snakeDirection = 180;
+  // Reset player 2 with random position and direction
+  state.player2.snakePosition = { x: player2Start.x, y: player2Start.y };
+  state.player2.snakeDirection = player2Start.direction;
   state.player2.isAlive = true;
-  state.player2.trail = [{ x: 2, y: 0 }];
+  state.player2.trail = [{ x: player2Start.x, y: player2Start.y }];
   state.player2.isTurningLeft = false;
   state.player2.isTurningRight = false;
   

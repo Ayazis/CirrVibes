@@ -16,18 +16,40 @@ export const draw3DScene = (gl, canvas) => {
 
   // Initialize game state if not exists
   if (!window.gameState) {
+    // Function to generate random starting positions and angles for snakes
+    function generateRandomStartingPosition() {
+      const viewSize = 10;
+      const aspect = canvas.width / canvas.height;
+      const horizontalBoundary = viewSize * aspect;
+      const verticalBoundary = viewSize;
+      
+      // Generate random position within safe bounds (not too close to edges)
+      const safeMargin = 1; // Keep snakes away from edges
+      const x = (Math.random() - 0.5) * 2 * (horizontalBoundary - safeMargin);
+      const y = (Math.random() - 0.5) * 2 * (verticalBoundary - safeMargin);
+      
+      // Generate random direction (0-360 degrees)
+      const direction = Math.random() * 360;
+      
+      return { x, y, direction };
+    }
+    
+    // Generate random starting positions for both players
+    const player1Start = generateRandomStartingPosition();
+    const player2Start = generateRandomStartingPosition();
+    
     window.gameState = {
       player1: {
-        snakePosition: { x: -2, y: 0 },
-        snakeDirection: 0,
-        trail: [{ x: -2, y: 0 }],
+        snakePosition: { x: player1Start.x, y: player1Start.y },
+        snakeDirection: player1Start.direction,
+        trail: [{ x: player1Start.x, y: player1Start.y }],
         isAlive: true,
         color: [1.0, 0.2, 0.2, 1.0]
       },
       player2: {
-        snakePosition: { x: 2, y: 0 },
-        snakeDirection: 180,
-        trail: [{ x: 2, y: 0 }],
+        snakePosition: { x: player2Start.x, y: player2Start.y },
+        snakeDirection: player2Start.direction,
+        trail: [{ x: player2Start.x, y: player2Start.y }],
         isAlive: true,
         color: [0.2, 0.2, 1.0, 1.0]
       }
