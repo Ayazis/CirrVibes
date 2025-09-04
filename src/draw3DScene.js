@@ -9,6 +9,10 @@ export const draw3DScene = (gl, canvas) => {
   // Enable depth testing
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
+  
+  // Enable alpha blending for transparency effects
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
   // Initialize game state if not exists
   if (!window.gameState) {
@@ -141,11 +145,12 @@ export const draw3DScene = (gl, canvas) => {
           
           // Color based on position in trail (newer = brighter) and player color
           const intensity = (i / player.trail.length) * 0.6 + 0.4;
+          const alpha = player.isAlive ? player.color[3] : player.color[3] * 0.5; // Make dead snakes semi-transparent
           const trailColor = [
             player.color[0] * intensity,
             player.color[1] * intensity,
             player.color[2] * intensity,
-            player.color[3]
+            alpha
           ];
           
           // Add colors for both triangles (6 vertices)
@@ -171,19 +176,87 @@ export const draw3DScene = (gl, canvas) => {
         headX - headSize, headY + headSize, 0.01
       );
       
-      // Head color (use player's color)
+      // Head color (use player's color, make dead snakes semi-transparent)
+      const headColor = [
+        player.color[0],
+        player.color[1], 
+        player.color[2],
+        player.isAlive ? player.color[3] : player.color[3] * 0.5
+      ];
       for (let j = 0; j < 6; j++) {
-        colors.push(...player.color);
+        colors.push(...headColor);
       }
     }
     
-    // Render both players
-    if (state.player1 && state.player1.isAlive) {
+    // Function to render boundary walls
+    function renderBoundaries() {
+      const aspect = canvas.width / canvas.height;
+      const viewSize = 10;
+      const horizontalBoundary = viewSize * aspect;
+      const verticalBoundary = viewSize;
+      const wallThickness = 0.1;
+      const wallColor = [0.5, 0.5, 0.5, 1.0]; // Gray color
+      
+      // Top wall
+      vertices.push(
+        -horizontalBoundary, verticalBoundary - wallThickness, 0,
+        horizontalBoundary, verticalBoundary - wallThickness, 0,
+        -horizontalBoundary, verticalBoundary, 0,
+        
+        horizontalBoundary, verticalBoundary - wallThickness, 0,
+        horizontalBoundary, verticalBoundary, 0,
+        -horizontalBoundary, verticalBoundary, 0
+      );
+      
+      // Bottom wall
+      vertices.push(
+        -horizontalBoundary, -verticalBoundary, 0,
+        horizontalBoundary, -verticalBoundary, 0,
+        -horizontalBoundary, -verticalBoundary + wallThickness, 0,
+        
+        horizontalBoundary, -verticalBoundary, 0,
+        horizontalBoundary, -verticalBoundary + wallThickness, 0,
+        -horizontalBoundary, -verticalBoundary + wallThickness, 0
+      );
+      
+      // Left wall
+      vertices.push(
+        -horizontalBoundary, -verticalBoundary, 0,
+        -horizontalBoundary + wallThickness, -verticalBoundary, 0,
+        -horizontalBoundary, verticalBoundary, 0,
+        
+        -horizontalBoundary + wallThickness, -verticalBoundary, 0,
+        -horizontalBoundary + wallThickness, verticalBoundary, 0,
+        -horizontalBoundary, verticalBoundary, 0
+      );
+      
+      // Right wall
+      vertices.push(
+        horizontalBoundary - wallThickness, -verticalBoundary, 0,
+        horizontalBoundary, -verticalBoundary, 0,
+        horizontalBoundary - wallThickness, verticalBoundary, 0,
+        
+        horizontalBoundary, -verticalBoundary, 0,
+        horizontalBoundary, verticalBoundary, 0,
+        horizontalBoundary - wallThickness, verticalBoundary, 0
+      );
+      
+      // Add colors for all wall vertices (24 vertices total = 4 walls * 6 vertices per wall)
+      for (let i = 0; i < 24; i++) {
+        colors.push(...wallColor);
+      }
+    }
+    
+    // Render both players (alive or dead - dead snakes remain visible)
+    if (state.player1) {
       renderPlayer(state.player1);
     }
-    if (state.player2 && state.player2.isAlive) {
+    if (state.player2) {
       renderPlayer(state.player2);
     }
+    
+    // Render boundary walls
+    renderBoundaries();
 
     // Always render if we have any vertices (at minimum one player head)
     if (vertices.length === 0) {

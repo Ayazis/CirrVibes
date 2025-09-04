@@ -4,6 +4,7 @@ initGame();
 
 // Snake game state with two players
 window.gameState = {
+  gameOverLogged: false, // Flag to prevent multiple game over messages
   player1: {
     snakePosition: { x: -2, y: 0 }, // Start on the left
     snakeDirection: 0, // Direction in degrees (0 = right, 90 = up, 180 = left, 270 = down)
@@ -48,6 +49,16 @@ let mouseState = {
 
 // Handle key press events (start turning) - Player 1
 document.addEventListener('keydown', (event) => {
+  // Reset game with 'R' key - only if all players are dead
+  if (event.key === 'r' || event.key === 'R') {
+    if (!window.gameState.player1.isAlive && !window.gameState.player2.isAlive) {
+      resetGame();
+    } else {
+      console.log('Cannot reset: game can only be reset when all players are dead');
+    }
+    return;
+  }
+  
   if (!window.gameState.player1.isAlive) return;
   
   if (event.key === controls.player1.left && !window.gameState.player1.isTurningLeft) {
@@ -117,7 +128,52 @@ function updateSnake() {
   // Update both players
   updatePlayer(state.player1);
   updatePlayer(state.player2);
+  
+  // Check if both players are dead for game over
+  if (!state.player1.isAlive && !state.player2.isAlive) {
+    // Just log the game over state, no auto-reset
+    if (!state.gameOverLogged) {
+      state.gameOverLogged = true;
+      console.log('Both players dead! Press R to reset.');
+    }
+  }
 }
+
+// Reset game function (can be called manually or automatically)
+function resetGame() {
+  const state = window.gameState;
+  
+  // Only allow reset if all players are dead
+  if (state.player1.isAlive || state.player2.isAlive) {
+    console.log('Cannot reset: game can only be reset when all players are dead');
+    return false;
+  }
+  
+  // Reset game state flags
+  state.gameOverLogged = false;
+  
+  // Reset player 1
+  state.player1.snakePosition = { x: -2, y: 0 };
+  state.player1.snakeDirection = 0;
+  state.player1.isAlive = true;
+  state.player1.trail = [{ x: -2, y: 0 }];
+  state.player1.isTurningLeft = false;
+  state.player1.isTurningRight = false;
+  
+  // Reset player 2
+  state.player2.snakePosition = { x: 2, y: 0 };
+  state.player2.snakeDirection = 180;
+  state.player2.isAlive = true;
+  state.player2.trail = [{ x: 2, y: 0 }];
+  state.player2.isTurningLeft = false;
+  state.player2.isTurningRight = false;
+  
+  console.log('Game reset');
+  return true;
+}
+
+// Expose reset function globally for manual reset
+window.resetGame = resetGame;
 
 function updatePlayer(player) {
   if (!player.isAlive) return;
@@ -140,9 +196,35 @@ function updatePlayer(player) {
   const deltaX = Math.cos(directionRad) * player.snakeSpeed;
   const deltaY = Math.sin(directionRad) * player.snakeSpeed;
   
+  // Calculate new position
+  const newX = player.snakePosition.x + deltaX;
+  const newY = player.snakePosition.y + deltaY;
+  
+  // Check for boundary collisions (game area bounds)
+  // These should match the orthographic projection bounds in draw3DScene.js
+  const viewSize = 10; // Must match the viewSize in draw3DScene.js
+  const canvas = document.getElementById('gameCanvas');
+  const aspect = canvas.width / canvas.height;
+  const horizontalBoundary = viewSize * aspect;
+  const verticalBoundary = viewSize;
+  
+  if (Math.abs(newX) > horizontalBoundary || Math.abs(newY) > verticalBoundary) {
+    player.isAlive = false;
+    console.log(`Player ${player === window.gameState.player1 ? '1' : '2'} died: hit boundary at (${newX.toFixed(2)}, ${newY.toFixed(2)})`);
+    console.log(`Boundaries: horizontal=±${horizontalBoundary.toFixed(2)}, vertical=±${verticalBoundary.toFixed(2)}`);
+    return;
+  }
+  
+  // Check for trail collisions
+  if (checkTrailCollision(newX, newY, player)) {
+    player.isAlive = false;
+    console.log(`Player ${player === window.gameState.player1 ? '1' : '2'} died: hit trail`);
+    return;
+  }
+  
   // Update position
-  player.snakePosition.x += deltaX;
-  player.snakePosition.y += deltaY;
+  player.snakePosition.x = newX;
+  player.snakePosition.y = newY;
   
   // Add current position to trail (for collision detection and rendering)
   player.trail.push({ x: player.snakePosition.x, y: player.snakePosition.y });
@@ -151,6 +233,69 @@ function updatePlayer(player) {
   if (player.trail.length > 1000) {
     player.trail.shift();
   }
+}
+
+// Check if a position collides with any trail
+function checkTrailCollision(x, y, currentPlayer) {
+  const collisionRadius = 0.06; // Slightly larger than trail width (0.05) for better collision detection
+  const state = window.gameState;
+  
+  // Check collision with player1's trail
+  if (state.player1.trail && checkTrailSegmentCollision(x, y, state.player1.trail, collisionRadius, currentPlayer === state.player1)) {
+    return true;
+  }
+  
+  // Check collision with player2's trail
+  if (state.player2.trail && checkTrailSegmentCollision(x, y, state.player2.trail, collisionRadius, currentPlayer === state.player2)) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Check collision with a specific trail
+function checkTrailSegmentCollision(x, y, trail, radius, isOwnTrail) {
+  if (!trail || trail.length < 2) return false;
+  
+  // Skip recent trail points for own trail to prevent immediate self-collision
+  const skipPoints = isOwnTrail ? 10 : 0;
+  const startIndex = Math.max(0, trail.length - skipPoints);
+  
+  for (let i = 0; i < startIndex - 1; i++) {
+    const p1 = trail[i];
+    const p2 = trail[i + 1];
+    
+    // Check distance from point to line segment
+    const distance = distanceToLineSegment(x, y, p1.x, p1.y, p2.x, p2.y);
+    
+    if (distance < radius) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// Calculate distance from point to line segment
+function distanceToLineSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  
+  if (length === 0) {
+    // Line segment is actually a point
+    return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+  }
+  
+  // Calculate the parameter t that represents where the closest point on the line segment is
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length)));
+  
+  // Calculate the closest point on the line segment
+  const closestX = x1 + t * dx;
+  const closestY = y1 + t * dy;
+  
+  // Return distance from point to closest point on line segment
+  return Math.sqrt((px - closestX) * (px - closestX) + (py - closestY) * (py - closestY));
 }
 
 // Start the game loop
