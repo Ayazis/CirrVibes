@@ -53,8 +53,6 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'r' || event.key === 'R') {
     if (!window.gameState.player1.isAlive && !window.gameState.player2.isAlive) {
       resetGame();
-    } else {
-      console.log('Cannot reset: game can only be reset when all players are dead');
     }
     return;
   }
@@ -63,10 +61,8 @@ document.addEventListener('keydown', (event) => {
   
   if (event.key === controls.player1.left && !window.gameState.player1.isTurningLeft) {
     window.gameState.player1.isTurningLeft = true;
-    console.log('Player 1 started turning left');
   } else if (event.key === controls.player1.right && !window.gameState.player1.isTurningRight) {
     window.gameState.player1.isTurningRight = true;
-    console.log('Player 1 started turning right');
   }
 });
 
@@ -74,10 +70,8 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('keyup', (event) => {
   if (event.key === controls.player1.left) {
     window.gameState.player1.isTurningLeft = false;
-    console.log('Player 1 stopped turning left');
   } else if (event.key === controls.player1.right) {
     window.gameState.player1.isTurningRight = false;
-    console.log('Player 1 stopped turning right');
   }
 });
 
@@ -90,11 +84,9 @@ document.addEventListener('mousedown', (event) => {
   if (event.button === 0) { // Left mouse button
     mouseState.leftButton = true;
     window.gameState.player2.isTurningLeft = true;
-    console.log('Player 2 started turning left (left mouse)');
   } else if (event.button === 2) { // Right mouse button
     mouseState.rightButton = true;
     window.gameState.player2.isTurningRight = true;
-    console.log('Player 2 started turning right (right mouse)');
   }
   
   event.preventDefault(); // Prevent context menu on right click
@@ -104,11 +96,9 @@ document.addEventListener('mouseup', (event) => {
   if (event.button === 0) { // Left mouse button
     mouseState.leftButton = false;
     window.gameState.player2.isTurningLeft = false;
-    console.log('Player 2 stopped turning left');
   } else if (event.button === 2) { // Right mouse button
     mouseState.rightButton = false;
     window.gameState.player2.isTurningRight = false;
-    console.log('Player 2 stopped turning right');
   }
   
   if (!mouseState.leftButton && !mouseState.rightButton) {
@@ -134,7 +124,6 @@ function updateSnake() {
     // Just log the game over state, no auto-reset
     if (!state.gameOverLogged) {
       state.gameOverLogged = true;
-      console.log('Both players dead! Press R to reset.');
     }
   }
 }
@@ -145,7 +134,6 @@ function resetGame() {
   
   // Only allow reset if all players are dead
   if (state.player1.isAlive || state.player2.isAlive) {
-    console.log('Cannot reset: game can only be reset when all players are dead');
     return false;
   }
   
@@ -168,7 +156,6 @@ function resetGame() {
   state.player2.isTurningLeft = false;
   state.player2.isTurningRight = false;
   
-  console.log('Game reset');
   return true;
 }
 
@@ -210,15 +197,12 @@ function updatePlayer(player) {
   
   if (Math.abs(newX) > horizontalBoundary || Math.abs(newY) > verticalBoundary) {
     player.isAlive = false;
-    console.log(`Player ${player === window.gameState.player1 ? '1' : '2'} died: hit boundary at (${newX.toFixed(2)}, ${newY.toFixed(2)})`);
-    console.log(`Boundaries: horizontal=±${horizontalBoundary.toFixed(2)}, vertical=±${verticalBoundary.toFixed(2)}`);
     return;
   }
   
   // Check for trail collisions
   if (checkTrailCollision(newX, newY, player)) {
     player.isAlive = false;
-    console.log(`Player ${player === window.gameState.player1 ? '1' : '2'} died: hit trail`);
     return;
   }
   

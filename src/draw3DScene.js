@@ -65,7 +65,7 @@ export const draw3DScene = (gl, canvas) => {
   
   // Check vertex shader compilation
   if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-    console.error('Vertex shader compilation error:', gl.getShaderInfoLog(vertexShader));
+    // Shader compilation failed
   }
 
   const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
@@ -74,7 +74,7 @@ export const draw3DScene = (gl, canvas) => {
   
   // Check fragment shader compilation
   if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-    console.error('Fragment shader compilation error:', gl.getShaderInfoLog(fragmentShader));
+    // Shader compilation failed
   }
 
   const program = gl.createProgram();
@@ -84,7 +84,7 @@ export const draw3DScene = (gl, canvas) => {
   
   // Check program linking
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program linking error:', gl.getProgramInfoLog(program));
+    // Program linking failed
   }
   
   gl.useProgram(program);
