@@ -26,6 +26,62 @@ const player1Start = generateRandomStartingPosition();
 const player2Start = generateRandomStartingPosition();
 
 // Snake game state with two players
+class Trail {
+  constructor(capacity = 1000, startX = 0, startY = 0) {
+    this._cap = capacity;
+    // backing Float32Array: [x0,y0, x1,y1, ...]
+    this._data = new Float32Array(capacity * 2);
+    this._start = 0; // index of oldest element (in points)
+    this._count = 0; // number of valid points
+    // reusable object for get() convenience (avoids allocs when reused carefully)
+    this._reusable = { x: 0, y: 0 };
+
+    if (typeof startX === 'number' && typeof startY === 'number') {
+      this.push(startX, startY);
+    }
+  }
+
+  push(x, y) {
+    if (this._count < this._cap) {
+      const idx = (this._start + this._count) % this._cap;
+      const p = idx * 2;
+      this._data[p] = x; this._data[p + 1] = y;
+      this._count++;
+    } else {
+      // overwrite oldest and advance start
+      const p = this._start * 2;
+      this._data[p] = x; this._data[p + 1] = y;
+      this._start = (this._start + 1) % this._cap;
+    }
+  }
+
+  // allocation-free iteration
+  forEach(cb) {
+    for (let i = 0; i < this._count; i++) {
+      const idx = (this._start + i) % this._cap;
+      const p = idx * 2;
+      cb(this._data[p], this._data[p + 1], i);
+    }
+  }
+
+  // convenience get (returns a reusable object - DO NOT hold reference)
+  get(i) {
+    if (i < 0 || i >= this._count) return undefined;
+    const idx = (this._start + i) % this._cap;
+    const p = idx * 2;
+    this._reusable.x = this._data[p];
+    this._reusable.y = this._data[p + 1];
+    return this._reusable;
+  }
+
+  clear() {
+    this._start = 0;
+    this._count = 0;
+  }
+
+  get length() { return this._count; }
+}
+
 window.gameState = {
   gameOverLogged: false, // Flag to prevent multiple game over messages
   player1: {
@@ -34,7 +90,7 @@ window.gameState = {
     snakeSpeed: 0.02, // Movement speed
     turnSpeed: 3, // Degrees per frame when turning
     isAlive: true,
-    trail: [{ x: player1Start.x, y: player1Start.y }], // Trail points for collision detection
+    trail: new Trail(1000, player1Start.x, player1Start.y), // Ring-buffer trail
     isTurningLeft: false,
     isTurningRight: false,
     color: [1.0, 0.2, 0.2, 1.0] // Red color
@@ -45,7 +101,7 @@ window.gameState = {
     snakeSpeed: 0.02,
     turnSpeed: 3,
     isAlive: true,
-    trail: [{ x: player2Start.x, y: player2Start.y }],
+    trail: new Trail(1000, player2Start.x, player2Start.y),
     isTurningLeft: false,
     isTurningRight: false,
     color: [0.2, 0.2, 1.0, 1.0] // Blue color
@@ -171,7 +227,7 @@ function resetGame() {
   state.player1.snakePosition = { x: player1Start.x, y: player1Start.y };
   state.player1.snakeDirection = player1Start.direction;
   state.player1.isAlive = true;
-  state.player1.trail = [{ x: player1Start.x, y: player1Start.y }];
+  state.player1.trail = new Trail(1000, player1Start.x, player1Start.y);
   state.player1.isTurningLeft = false;
   state.player1.isTurningRight = false;
   
@@ -179,7 +235,7 @@ function resetGame() {
   state.player2.snakePosition = { x: player2Start.x, y: player2Start.y };
   state.player2.snakeDirection = player2Start.direction;
   state.player2.isAlive = true;
-  state.player2.trail = [{ x: player2Start.x, y: player2Start.y }];
+  state.player2.trail = new Trail(1000, player2Start.x, player2Start.y);
   state.player2.isTurningLeft = false;
   state.player2.isTurningRight = false;
   
@@ -238,12 +294,7 @@ function updatePlayer(player) {
   player.snakePosition.y = newY;
   
   // Add current position to trail (for collision detection and rendering)
-  player.trail.push({ x: player.snakePosition.x, y: player.snakePosition.y });
-  
-  // Limit trail length to prevent memory issues (keep last 1000 points)
-  if (player.trail.length > 1000) {
-    player.trail.shift();
-  }
+  player.trail.push(player.snakePosition.x, player.snakePosition.y);
 }
 
 // Check if a position collides with any trail
@@ -267,46 +318,55 @@ function checkTrailCollision(x, y, currentPlayer) {
 // Check collision with a specific trail
 function checkTrailSegmentCollision(x, y, trail, radius, isOwnTrail) {
   if (!trail || trail.length < 2) return false;
-  
+
   // Skip recent trail points for own trail to prevent immediate self-collision
   const skipPoints = isOwnTrail ? 10 : 0;
-  const startIndex = Math.max(0, trail.length - skipPoints);
-  
-  for (let i = 0; i < startIndex - 1; i++) {
-    const p1 = trail[i];
-    const p2 = trail[i + 1];
-    
-    // Check distance from point to line segment
-    const distance = distanceToLineSegment(x, y, p1.x, p1.y, p2.x, p2.y);
-    
-    if (distance < radius) {
-      return true;
-    }
+  // segments indices run 0 .. (length-2)
+  const maxSegmentIndex = trail.length - skipPoints - 2; // inclusive
+  if (maxSegmentIndex < 0) return false;
+
+  const radiusSq = radius * radius;
+  for (let i = 0; i <= maxSegmentIndex; i++) {
+    const p1 = trail.get(i);
+    const p2 = trail.get(i + 1);
+
+    // Check squared distance from point to line segment
+    const distSq = distanceToLineSegmentSq(x, y, p1.x, p1.y, p2.x, p2.y);
+    if (distSq < radiusSq) return true;
   }
-  
+
   return false;
 }
 
 // Calculate distance from point to line segment
 function distanceToLineSegment(px, py, x1, y1, x2, y2) {
+  // Keep the old function name but implement using squared distance helper
+  return Math.sqrt(distanceToLineSegmentSq(px, py, x1, y1, x2, y2));
+}
+
+// Squared-distance variant (avoids Math.sqrt)
+function distanceToLineSegmentSq(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1;
   const dy = y2 - y1;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  
-  if (length === 0) {
-    // Line segment is actually a point
-    return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+  const lenSq = dx * dx + dy * dy;
+
+  if (lenSq === 0) {
+    // segment is a point
+    const vx = px - x1;
+    const vy = py - y1;
+    return vx * vx + vy * vy;
   }
-  
-  // Calculate the parameter t that represents where the closest point on the line segment is
-  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length)));
-  
-  // Calculate the closest point on the line segment
+
+  // Project point onto line (parameter t)
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+
   const closestX = x1 + t * dx;
   const closestY = y1 + t * dy;
-  
-  // Return distance from point to closest point on line segment
-  return Math.sqrt((px - closestX) * (px - closestX) + (py - closestY) * (py - closestY));
+  const rx = px - closestX;
+  const ry = py - closestY;
+  return rx * rx + ry * ry;
 }
 
 // Start the game loop

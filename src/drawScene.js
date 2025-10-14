@@ -136,35 +136,37 @@ export const drawScene = (gl, canvas) => {
     function renderPlayer(player) {
       // Generate trail segments (only if we have at least 2 points)
       if (player.trail && player.trail.length >= 2) {
-        for (let i = 0; i < player.trail.length - 1; i++) {
-          const current = player.trail[i];
-          const next = player.trail[i + 1];
-          
+        // Iterate over segments by remembering previous point
+        let prevX = null;
+        let prevY = null;
+        let idx = 0;
+        player.trail.forEach((cx, cy, i) => {
+          if (prevX === null) {
+            prevX = cx; prevY = cy; idx++; return; // need two points to make a segment
+          }
+
+          const currentX = prevX, currentY = prevY;
+          const nextX = cx, nextY = cy;
+
           // Calculate perpendicular direction for trail width
-          const dx = next.x - current.x;
-          const dy = next.y - current.y;
+          const dx = nextX - currentX;
+          const dy = nextY - currentY;
           const length = Math.sqrt(dx * dx + dy * dy);
-          
-          if (length === 0) continue;
-          
+          if (length === 0) { prevX = cx; prevY = cy; idx++; return; }
           const perpX = (-dy / length) * trailWidth;
           const perpY = (dx / length) * trailWidth;
-          
-          // Create quad for this trail segment
-          // Triangle 1
+
+          // Create quad for this trail segment (two triangles)
           vertices.push(
-            current.x - perpX, current.y - perpY, 0,
-            current.x + perpX, current.y + perpY, 0,
-            next.x - perpX, next.y - perpY, 0
+            currentX - perpX, currentY - perpY, 0,
+            currentX + perpX, currentY + perpY, 0,
+            nextX - perpX, nextY - perpY, 0,
+
+            currentX + perpX, currentY + perpY, 0,
+            nextX + perpX, nextY + perpY, 0,
+            nextX - perpX, nextY - perpY, 0
           );
-          
-          // Triangle 2
-          vertices.push(
-            current.x + perpX, current.y + perpY, 0,
-            next.x + perpX, next.y + perpY, 0,
-            next.x - perpX, next.y - perpY, 0
-          );
-          
+
           // Color based on position in trail (newer = brighter) and player color
           const intensity = (i / player.trail.length) * 0.6 + 0.4;
           const alpha = player.isAlive ? player.color[3] : player.color[3] * 0.5; // Make dead snakes semi-transparent
@@ -174,12 +176,14 @@ export const drawScene = (gl, canvas) => {
             player.color[2] * intensity,
             alpha
           ];
-          
+
           // Add colors for both triangles (6 vertices)
           for (let j = 0; j < 6; j++) {
             colors.push(...trailColor);
           }
-        }
+
+          prevX = cx; prevY = cy; idx++;
+        });
       }
       
       // Draw player head (current position)

@@ -9,8 +9,8 @@ This project is a web-based version of the classic multiplayer game "Achtung die
 
 ## Current Progress
 - [x] Project structure set up
+- [x] Core game logic implementation
 - [ ] Game interface design
-- [ ] Core game logic implementation
 - [ ] WebGL 3D rendering integration
 - [ ] Multiplayer functionality
 - [ ] Testing and debugging
