@@ -28,31 +28,44 @@ const player2Start = generateRandomStartingPosition();
 // Snake game state with two players
 class Trail {
   constructor(capacity = 1000, startX = 0, startY = 0) {
-    this._cap = capacity;
+    this._cap = Math.max(1, capacity);
     // backing Float32Array: [x0,y0, x1,y1, ...]
-    this._data = new Float32Array(capacity * 2);
+    this._data = new Float32Array(this._cap * 2);
     this._start = 0; // index of oldest element (in points)
     this._count = 0; // number of valid points
-    // reusable object for get() convenience (avoids allocs when reused carefully)
-    this._reusable = { x: 0, y: 0 };
-
     if (typeof startX === 'number' && typeof startY === 'number') {
       this.push(startX, startY);
     }
   }
 
-  push(x, y) {
-    if (this._count < this._cap) {
-      const idx = (this._start + this._count) % this._cap;
-      const p = idx * 2;
-      this._data[p] = x; this._data[p + 1] = y;
-      this._count++;
-    } else {
-      // overwrite oldest and advance start
-      const p = this._start * 2;
-      this._data[p] = x; this._data[p + 1] = y;
-      this._start = (this._start + 1) % this._cap;
+  _growCapacity(minCapacity) {
+    const currentCap = this._cap;
+    let newCap = currentCap * 2;
+    while (newCap < minCapacity) {
+      newCap *= 2;
     }
+    const newData = new Float32Array(newCap * 2);
+    for (let i = 0; i < this._count; i++) {
+      const idx = (this._start + i) % currentCap;
+      const src = idx * 2;
+      const dest = i * 2;
+      newData[dest] = this._data[src];
+      newData[dest + 1] = this._data[src + 1];
+    }
+    this._data = newData;
+    this._cap = newCap;
+    this._start = 0;
+  }
+
+  push(x, y) {
+    if (this._count >= this._cap) {
+      this._growCapacity(this._count + 1);
+    }
+    const idx = (this._start + this._count) % this._cap;
+    const p = idx * 2;
+    this._data[p] = x;
+    this._data[p + 1] = y;
+    this._count++;
   }
 
   // allocation-free iteration
@@ -64,14 +77,15 @@ class Trail {
     }
   }
 
-  // convenience get (returns a reusable object - DO NOT hold reference)
-  get(i) {
+  // convenience get - optionally accept an object to write into to avoid allocations
+  get(i, out) {
     if (i < 0 || i >= this._count) return undefined;
     const idx = (this._start + i) % this._cap;
     const p = idx * 2;
-    this._reusable.x = this._data[p];
-    this._reusable.y = this._data[p + 1];
-    return this._reusable;
+    const target = out ?? { x: 0, y: 0 };
+    target.x = this._data[p];
+    target.y = this._data[p + 1];
+    return target;
   }
 
   clear() {

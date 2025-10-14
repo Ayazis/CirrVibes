@@ -1,6 +1,10 @@
 // Utility functions for matrix operations
 export const mat4 = {
-  create: () => new Float32Array(16).fill(0).map((_, i) => (i % 5 === 0 ? 1 : 0)),
+  create: () => {
+    const out = new Float32Array(16);
+    out[0] = 1; out[5] = 1; out[10] = 1; out[15] = 1;
+    return out;
+  },
   identity: (out) => {
     out[0] = 1; out[1] = 0; out[2] = 0; out[3] = 0;
     out[4] = 0; out[5] = 1; out[6] = 0; out[7] = 0;

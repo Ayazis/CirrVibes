@@ -1,55 +1,41 @@
-// Logic for drawing the scene - Achtung die Curve style
+// Logic for drawing the scene - Achtung die Kurve style (instanced segment quad expansion)
 import { mat4 } from './mat4.js';
 
 export const drawScene = (gl, canvas) => {
-  // Clear the canvas
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  // Enable depth testing
-  gl.enable(gl.DEPTH_TEST);
-  gl.depthFunc(gl.LEQUAL);
-  
-  // Enable alpha blending for transparency effects
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-  // Initialize game state if not exists
   if (!window.gameState) {
-    // Function to generate random starting positions and angles for snakes
     function generateRandomStartingPosition() {
       const viewSize = 10;
       const aspect = canvas.width / canvas.height;
       const horizontalBoundary = viewSize * aspect;
       const verticalBoundary = viewSize;
-      
-      // Generate random position within safe bounds (not too close to edges)
-      const safeMargin = 1; // Keep snakes away from edges
+      const safeMargin = 1;
       const x = (Math.random() - 0.5) * 2 * (horizontalBoundary - safeMargin);
       const y = (Math.random() - 0.5) * 2 * (verticalBoundary - safeMargin);
-      
-      // Generate random direction (0-360 degrees)
       const direction = Math.random() * 360;
-      
       return { x, y, direction };
     }
-    
-    // Generate random starting positions for both players
     const player1Start = generateRandomStartingPosition();
     const player2Start = generateRandomStartingPosition();
-    
     window.gameState = {
       player1: {
         snakePosition: { x: player1Start.x, y: player1Start.y },
         snakeDirection: player1Start.direction,
-        trail: [{ x: player1Start.x, y: player1Start.y }],
+        trail: window.Trail ? new window.Trail(1000, player1Start.x, player1Start.y) : [{ x: player1Start.x, y: player1Start.y }],
         isAlive: true,
         color: [1.0, 0.2, 0.2, 1.0]
       },
       player2: {
         snakePosition: { x: player2Start.x, y: player2Start.y },
         snakeDirection: player2Start.direction,
-        trail: [{ x: player2Start.x, y: player2Start.y }],
+        trail: window.Trail ? new window.Trail(1000, player2Start.x, player2Start.y) : [{ x: player2Start.x, y: player2Start.y }],
         isAlive: true,
         color: [0.2, 0.2, 1.0, 1.0]
       }
@@ -57,26 +43,33 @@ export const drawScene = (gl, canvas) => {
   }
 
   // Buffer setup
-  const vertexBuffer = gl.createBuffer();
-  const colorBuffer = gl.createBuffer();
+  const segmentBuffer = gl.createBuffer();
 
-  // Shader sources
+  // Vertex shader for quad expansion (each segment = 4 vertices, 2 triangles)
   const vertexShaderSource = `
-    attribute vec3 position;
-    attribute vec4 color;
-    varying vec4 vColor;
+    attribute vec2 start;
+    attribute vec2 end;
+    attribute float corner; // 0, 1, 2, 3 for quad corners
+    uniform float trailWidth;
+    uniform vec4 baseColor;
     uniform mat4 modelViewMatrix;
     uniform mat4 projectionMatrix;
     void main() {
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      vColor = color;
+      vec2 dir = normalize(end - start);
+      vec2 perp = vec2(-dir.y, dir.x) * trailWidth;
+      vec2 pos;
+      if (corner == 0.0) pos = start - perp;
+      else if (corner == 1.0) pos = start + perp;
+      else if (corner == 2.0) pos = end + perp;
+      else pos = end - perp;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 0.0, 1.0);
     }
   `;
   const fragmentShaderSource = `
     precision mediump float;
-    varying vec4 vColor;
+    uniform vec4 baseColor;
     void main() {
-      gl_FragColor = vColor;
+      gl_FragColor = baseColor;
     }
   `;
 
@@ -84,42 +77,64 @@ export const drawScene = (gl, canvas) => {
   const vertexShader = gl.createShader(gl.VERTEX_SHADER);
   gl.shaderSource(vertexShader, vertexShaderSource);
   gl.compileShader(vertexShader);
-  
-  // Check vertex shader compilation
-  if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-    // Shader compilation failed
-  }
+  if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {}
 
   const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
   gl.shaderSource(fragmentShader, fragmentShaderSource);
   gl.compileShader(fragmentShader);
-  
-  // Check fragment shader compilation
-  if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-    // Shader compilation failed
-  }
+  if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {}
 
   const program = gl.createProgram();
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
-  
-  // Check program linking
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    // Program linking failed
-  }
-  
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {}
+
   gl.useProgram(program);
 
-  const positionLocation = gl.getAttribLocation(program, 'position');
-  const colorLocation = gl.getAttribLocation(program, 'color');
+  const startLocation = gl.getAttribLocation(program, 'start');
+  const endLocation = gl.getAttribLocation(program, 'end');
+  const cornerLocation = gl.getAttribLocation(program, 'corner');
+  const trailWidthLocation = gl.getUniformLocation(program, 'trailWidth');
+  const baseColorLocation = gl.getUniformLocation(program, 'baseColor');
   const modelViewMatrixLocation = gl.getUniformLocation(program, 'modelViewMatrix');
   const projectionMatrixLocation = gl.getUniformLocation(program, 'projectionMatrix');
 
+  const modelViewMatrix = mat4.create();
+  const projectionMatrix = mat4.create();
+
+  const viewSize = 10;
+  const applyMatrices = () => {
+    const aspect = canvas.width / canvas.height;
+    const horizontalBoundary = viewSize * aspect;
+    const verticalBoundary = viewSize;
+    mat4.identity(modelViewMatrix);
+    mat4.ortho(
+      projectionMatrix,
+      -horizontalBoundary,
+      horizontalBoundary,
+      -verticalBoundary,
+      verticalBoundary,
+      -1,
+      1
+    );
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
+    gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix);
+  };
+
+  applyMatrices();
+
+  window.addEventListener('resize', () => {
+    gl.canvas.width = window.innerWidth * 0.8;
+    gl.canvas.height = window.innerHeight * 0.8;
+    applyMatrices();
+  });
+
   function animate() {
-    // Clear the canvas for each frame
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    applyMatrices();
 
     const state = window.gameState;
     if (!state) {
@@ -127,206 +142,63 @@ export const drawScene = (gl, canvas) => {
       return;
     }
 
-    // Create trail geometry from trail points for both players
-    const trailWidth = 0.05;
-    const vertices = [];
-    const colors = [];
-    
-    // Helper function to render a player's trail and head
-    function renderPlayer(player) {
-      // Generate trail segments (only if we have at least 2 points)
-      if (player.trail && player.trail.length >= 2) {
-        // Iterate over segments by remembering previous point
-        let prevX = null;
-        let prevY = null;
-        let idx = 0;
-        player.trail.forEach((cx, cy, i) => {
-          if (prevX === null) {
-            prevX = cx; prevY = cy; idx++; return; // need two points to make a segment
-          }
-
-          const currentX = prevX, currentY = prevY;
-          const nextX = cx, nextY = cy;
-
-          // Calculate perpendicular direction for trail width
-          const dx = nextX - currentX;
-          const dy = nextY - currentY;
-          const length = Math.sqrt(dx * dx + dy * dy);
-          if (length === 0) { prevX = cx; prevY = cy; idx++; return; }
-          const perpX = (-dy / length) * trailWidth;
-          const perpY = (dx / length) * trailWidth;
-
-          // Create quad for this trail segment (two triangles)
-          vertices.push(
-            currentX - perpX, currentY - perpY, 0,
-            currentX + perpX, currentY + perpY, 0,
-            nextX - perpX, nextY - perpY, 0,
-
-            currentX + perpX, currentY + perpY, 0,
-            nextX + perpX, nextY + perpY, 0,
-            nextX - perpX, nextY - perpY, 0
-          );
-
-          // Color based on position in trail (newer = brighter) and player color
-          const intensity = (i / player.trail.length) * 0.6 + 0.4;
-          const alpha = player.isAlive ? player.color[3] : player.color[3] * 0.5; // Make dead snakes semi-transparent
-          const trailColor = [
-            player.color[0] * intensity,
-            player.color[1] * intensity,
-            player.color[2] * intensity,
-            alpha
-          ];
-
-          // Add colors for both triangles (6 vertices)
-          for (let j = 0; j < 6; j++) {
-            colors.push(...trailColor);
-          }
-
-          prevX = cx; prevY = cy; idx++;
-        });
+    // Build quad buffer: for each segment, 4 vertices (start/end/corner)
+    function extractQuads(trail) {
+      const quads = [];
+      if (!trail || typeof trail.get !== 'function' || typeof trail.length !== 'number') return quads;
+      for (let i = 1; i < trail.length; i++) {
+        const prev = trail.get(i - 1);
+        const curr = trail.get(i);
+        if (!prev || !curr || prev.x === undefined || prev.y === undefined || curr.x === undefined || curr.y === undefined) continue;
+        // Build two triangles per segment (6 vertices: 0-1-2, 0-2-3)
+        quads.push(prev.x, prev.y, curr.x, curr.y, 0);
+        quads.push(prev.x, prev.y, curr.x, curr.y, 1);
+        quads.push(prev.x, prev.y, curr.x, curr.y, 2);
+        quads.push(prev.x, prev.y, curr.x, curr.y, 0);
+        quads.push(prev.x, prev.y, curr.x, curr.y, 2);
+        quads.push(prev.x, prev.y, curr.x, curr.y, 3);
       }
-      
-      // Draw player head (current position)
-      const headSize = 0.08;
-      const headX = player.snakePosition.x;
-      const headY = player.snakePosition.y;
-      
-      // Head quad
-      vertices.push(
-        headX - headSize, headY - headSize, 0.01,
-        headX + headSize, headY - headSize, 0.01,
-        headX - headSize, headY + headSize, 0.01,
-        
-        headX + headSize, headY - headSize, 0.01,
-        headX + headSize, headY + headSize, 0.01,
-        headX - headSize, headY + headSize, 0.01
-      );
-      
-      // Head color (use player's color, make dead snakes semi-transparent)
-      const headColor = [
-        player.color[0],
-        player.color[1], 
-        player.color[2],
-        player.isAlive ? player.color[3] : player.color[3] * 0.5
-      ];
-      for (let j = 0; j < 6; j++) {
-        colors.push(...headColor);
-      }
-    }
-    
-    // Function to render boundary walls
-    function renderBoundaries() {
-      const aspect = canvas.width / canvas.height;
-      const viewSize = 10;
-      const horizontalBoundary = viewSize * aspect;
-      const verticalBoundary = viewSize;
-      const wallThickness = 0.1;
-      const wallColor = [0.5, 0.5, 0.5, 1.0]; // Gray color
-      
-      // Top wall
-      vertices.push(
-        -horizontalBoundary, verticalBoundary - wallThickness, 0,
-        horizontalBoundary, verticalBoundary - wallThickness, 0,
-        -horizontalBoundary, verticalBoundary, 0,
-        
-        horizontalBoundary, verticalBoundary - wallThickness, 0,
-        horizontalBoundary, verticalBoundary, 0,
-        -horizontalBoundary, verticalBoundary, 0
-      );
-      
-      // Bottom wall
-      vertices.push(
-        -horizontalBoundary, -verticalBoundary, 0,
-        horizontalBoundary, -verticalBoundary, 0,
-        -horizontalBoundary, -verticalBoundary + wallThickness, 0,
-        
-        horizontalBoundary, -verticalBoundary, 0,
-        horizontalBoundary, -verticalBoundary + wallThickness, 0,
-        -horizontalBoundary, -verticalBoundary + wallThickness, 0
-      );
-      
-      // Left wall
-      vertices.push(
-        -horizontalBoundary, -verticalBoundary, 0,
-        -horizontalBoundary + wallThickness, -verticalBoundary, 0,
-        -horizontalBoundary, verticalBoundary, 0,
-        
-        -horizontalBoundary + wallThickness, -verticalBoundary, 0,
-        -horizontalBoundary + wallThickness, verticalBoundary, 0,
-        -horizontalBoundary, verticalBoundary, 0
-      );
-      
-      // Right wall
-      vertices.push(
-        horizontalBoundary - wallThickness, -verticalBoundary, 0,
-        horizontalBoundary, -verticalBoundary, 0,
-        horizontalBoundary - wallThickness, verticalBoundary, 0,
-        
-        horizontalBoundary, -verticalBoundary, 0,
-        horizontalBoundary, verticalBoundary, 0,
-        horizontalBoundary - wallThickness, verticalBoundary, 0
-      );
-      
-      // Add colors for all wall vertices (24 vertices total = 4 walls * 6 vertices per wall)
-      for (let i = 0; i < 24; i++) {
-        colors.push(...wallColor);
-      }
-    }
-    
-    // Render both players (alive or dead - dead snakes remain visible)
-    if (state.player1) {
-      renderPlayer(state.player1);
-    }
-    if (state.player2) {
-      renderPlayer(state.player2);
-    }
-    
-    // Render boundary walls
-    renderBoundaries();
-
-    // Always render if we have any vertices (at minimum one player head)
-    if (vertices.length === 0) {
-      requestAnimationFrame(animate);
-      return;
+      return quads;
     }
 
-    const verticesArray = new Float32Array(vertices);
-    const colorsArray = new Float32Array(colors);
+    // Extract quads for both players inside animate
+    const player1Quads = extractQuads(state.player1.trail);
+    const player2Quads = extractQuads(state.player2.trail);
 
-    // Set up matrices for 2D view
-    const modelViewMatrix = mat4.create();
-    const projectionMatrix = mat4.create();
-    
-    // Orthographic projection for 2D view - static camera showing entire playing field
-    const aspect = canvas.width / canvas.height;
-    const viewSize = 10; // Increased view size to show more of the playing field
-    mat4.ortho(projectionMatrix, 
-      -viewSize * aspect, viewSize * aspect,  // left, right
-      -viewSize, viewSize,                    // bottom, top
-      -1, 1                                   // near, far
-    );
-    
-    // Keep the camera static at the origin - showing both players
-    // mat4.translate(modelViewMatrix, modelViewMatrix, [-headX, -headY, 0]);
+    // Draw player 1 trail
+    if (player1Quads.length > 0) {
+      const quadArray1 = new Float32Array(player1Quads);
+      gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, quadArray1, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(startLocation);
+      gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, 20, 0);
+      gl.enableVertexAttribArray(endLocation);
+      gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, 20, 8);
+      gl.enableVertexAttribArray(cornerLocation);
+      gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, 20, 16);
+      gl.uniform1f(trailWidthLocation, 0.05);
+      gl.uniform4fv(baseColorLocation, state.player1.color);
+      gl.drawArrays(gl.TRIANGLES, 0, quadArray1.length / 5);
+    }
 
-    gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
-    gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix);
-
-    // Bind and draw
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, verticesArray, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, colorsArray, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(colorLocation);
-    gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
-
-    gl.drawArrays(gl.TRIANGLES, 0, verticesArray.length / 3);
+    // Draw player 2 trail
+    if (player2Quads.length > 0) {
+      const quadArray2 = new Float32Array(player2Quads);
+      gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, quadArray2, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(startLocation);
+      gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, 20, 0);
+      gl.enableVertexAttribArray(endLocation);
+      gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, 20, 8);
+      gl.enableVertexAttribArray(cornerLocation);
+      gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, 20, 16);
+      gl.uniform1f(trailWidthLocation, 0.05);
+      gl.uniform4fv(baseColorLocation, state.player2.color);
+      gl.drawArrays(gl.TRIANGLES, 0, quadArray2.length / 5);
+    }
 
     requestAnimationFrame(animate);
   }
-  
+
   animate();
 };
