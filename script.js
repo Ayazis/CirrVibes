@@ -215,8 +215,8 @@ function updatePlayer(player) {
   const newY = player.snakePosition.y + deltaY;
   
   // Check for boundary collisions (game area bounds)
-  // These should match the orthographic projection bounds in draw3DScene.js
-  const viewSize = 10; // Must match the viewSize in draw3DScene.js
+  // These should match the orthographic projection bounds in drawScene.js
+  const viewSize = 10; // Must match the viewSize in drawScene.js
   const canvas = document.getElementById('gameCanvas');
   const aspect = canvas.width / canvas.height;
   const horizontalBoundary = viewSize * aspect;

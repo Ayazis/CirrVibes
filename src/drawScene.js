@@ -1,7 +1,7 @@
-// Logic for drawing the 3D scene - Achtung die Curve style
+// Logic for drawing the scene - Achtung die Curve style
 import { mat4 } from './mat4.js';
 
-export const draw3DScene = (gl, canvas) => {
+export const drawScene = (gl, canvas) => {
   // Clear the canvas
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
