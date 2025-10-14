@@ -22,24 +22,18 @@ export const drawScene = (gl, canvas) => {
       const direction = Math.random() * 360;
       return { x, y, direction };
     }
-    const player1Start = generateRandomStartingPosition();
-    const player2Start = generateRandomStartingPosition();
-    window.gameState = {
-      player1: {
-        snakePosition: { x: player1Start.x, y: player1Start.y },
-        snakeDirection: player1Start.direction,
-        trail: window.Trail ? new window.Trail(1000, player1Start.x, player1Start.y) : [{ x: player1Start.x, y: player1Start.y }],
-        isAlive: true,
-        color: [1.0, 0.2, 0.2, 1.0]
-      },
-      player2: {
-        snakePosition: { x: player2Start.x, y: player2Start.y },
-        snakeDirection: player2Start.direction,
-        trail: window.Trail ? new window.Trail(1000, player2Start.x, player2Start.y) : [{ x: player2Start.x, y: player2Start.y }],
-        isAlive: true,
-        color: [0.2, 0.2, 1.0, 1.0]
-      }
-    };
+const maxPlayers = 8;
+window.gameState = {};
+for (let i = 1; i <= maxPlayers; i++) {
+  const start = generateRandomStartingPosition();
+  window.gameState[`player${i}`] = {
+    snakePosition: { x: start.x, y: start.y },
+    snakeDirection: start.direction,
+    trail: window.Trail ? new window.Trail(1000, start.x, start.y) : [{ x: start.x, y: start.y }],
+    isAlive: true,
+    color: [Math.random(), Math.random(), Math.random(), 1.0] // Random color for each player
+  };
+}
   }
 
   // Buffer setup
@@ -161,41 +155,24 @@ export const drawScene = (gl, canvas) => {
       return quads;
     }
 
-    // Extract quads for both players inside animate
-    const player1Quads = extractQuads(state.player1.trail);
-    const player2Quads = extractQuads(state.player2.trail);
-
-    // Draw player 1 trail
-    if (player1Quads.length > 0) {
-      const quadArray1 = new Float32Array(player1Quads);
-      gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, quadArray1, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(startLocation);
-      gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, 20, 0);
-      gl.enableVertexAttribArray(endLocation);
-      gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, 20, 8);
-      gl.enableVertexAttribArray(cornerLocation);
-      gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, 20, 16);
-      gl.uniform1f(trailWidthLocation, 0.05);
-      gl.uniform4fv(baseColorLocation, state.player1.color);
-      gl.drawArrays(gl.TRIANGLES, 0, quadArray1.length / 5);
-    }
-
-    // Draw player 2 trail
-    if (player2Quads.length > 0) {
-      const quadArray2 = new Float32Array(player2Quads);
-      gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, quadArray2, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(startLocation);
-      gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, 20, 0);
-      gl.enableVertexAttribArray(endLocation);
-      gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, 20, 8);
-      gl.enableVertexAttribArray(cornerLocation);
-      gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, 20, 16);
-      gl.uniform1f(trailWidthLocation, 0.05);
-      gl.uniform4fv(baseColorLocation, state.player2.color);
-      gl.drawArrays(gl.TRIANGLES, 0, quadArray2.length / 5);
-    }
+Object.keys(state).forEach(playerKey => {
+  const player = state[playerKey];
+  const playerQuads = extractQuads(player.trail);
+  if (playerQuads.length > 0) {
+    const quadArray = new Float32Array(playerQuads);
+    gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, quadArray, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(startLocation);
+    gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, 20, 0);
+    gl.enableVertexAttribArray(endLocation);
+    gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, 20, 8);
+    gl.enableVertexAttribArray(cornerLocation);
+    gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, 20, 16);
+    gl.uniform1f(trailWidthLocation, 0.05);
+    gl.uniform4fv(baseColorLocation, player.color);
+    gl.drawArrays(gl.TRIANGLES, 0, quadArray.length / 5);
+  }
+});
 
     requestAnimationFrame(animate);
   }
