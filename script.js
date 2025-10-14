@@ -1,5 +1,201 @@
 import { initGame } from './src/initGame.js';
 
+// First-start menu (only shown once). Injects a simple overlay that lets the user add extra players,
+// shows each player's color and their control scheme, and saves the choice to localStorage.
+// This menu does not change the existing gameplay code — it only collects and persists preferences.
+(function createFirstStartMenu() {
+  try {
+    const done = localStorage.getItem('firstStartDone');
+    if (done === 'true') return; // already completed
+
+    // Preset player templates (existing two players preserved)
+    const presets = [
+      { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' }, // existing
+      { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' }, // existing
+      { name: 'Player 3', color: '#66ff66', controls: 'A / D' },
+      { name: 'Player 4', color: '#ffd166', controls: 'Num4 / Num6' }
+    ];
+
+    // Start with two players by default
+    const players = [Object.assign({}, presets[0]), Object.assign({}, presets[1])];
+
+    // Inject minimal CSS for the overlay
+    const style = document.createElement('style');
+    style.textContent = `
+      #firstStartMenuOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        color: #fff;
+        font-family: Arial, sans-serif;
+      }
+      #firstStartMenu {
+        background: #111;
+        border: 2px solid #fff;
+        padding: 20px;
+        border-radius: 8px;
+        width: 420px;
+        max-width: calc(100% - 40px);
+      }
+      #firstStartMenu h2 { margin: 0 0 12px 0; }
+      .player-row {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        margin:8px 0;
+        padding:8px;
+        background: rgba(255,255,255,0.03);
+        border-radius:6px;
+      }
+      .player-left { display:flex; align-items:center; gap:10px; }
+      .color-swatch { width:28px; height:18px; border-radius:4px; border:1px solid #000; box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset; }
+      .controls-select { padding:6px; background:#222; color:#fff; border:1px solid #333; border-radius:4px; }
+      .menu-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
+      button { padding:8px 12px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; cursor:pointer; }
+      button.primary { background: #0b7; border-color: #087; color:#002; font-weight:700; }
+      button.ghost { background:transparent; border-color:#555; }
+      .add-btn { margin-left:4px; }
+      .remove-btn { background:transparent; border: none; color:#f66; cursor:pointer; font-weight:600; }
+      .muted { color: #aaa; font-size:13px; margin-top:8px; }
+    `;
+    document.head.appendChild(style);
+
+    // Build overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'firstStartMenuOverlay';
+
+    const menu = document.createElement('div');
+    menu.id = 'firstStartMenu';
+
+    const title = document.createElement('h2');
+    title.textContent = 'Welcome — Configure Players';
+
+    const description = document.createElement('div');
+    description.className = 'muted';
+    description.textContent = 'This first-start menu runs only once. You can add players and see their colors and control keys. The in-game interface remains unchanged.';
+
+    const list = document.createElement('div');
+    list.id = 'playerList';
+
+    function renderPlayers() {
+      list.innerHTML = '';
+      players.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'player-row';
+        const left = document.createElement('div');
+        left.className = 'player-left';
+        const sw = document.createElement('div');
+        sw.className = 'color-swatch';
+        sw.style.background = p.color;
+        const label = document.createElement('div');
+        label.textContent = `${p.name}`;
+        left.appendChild(sw);
+        left.appendChild(label);
+
+        const controlsSelect = document.createElement('select');
+        controlsSelect.className = 'controls-select';
+        const options = [
+          p.controls,
+          'ArrowLeft / ArrowRight',
+          'Mouse Left / Mouse Right',
+          'A / D',
+          'Num4 / Num6',
+          'J / L'
+        ];
+        // Ensure unique options and keep current
+        const uniq = Array.from(new Set(options));
+        uniq.forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          if (opt === p.controls) o.selected = true;
+          controlsSelect.appendChild(o);
+        });
+        controlsSelect.addEventListener('change', () => {
+          p.controls = controlsSelect.value;
+        });
+
+        row.appendChild(left);
+        row.appendChild(controlsSelect);
+
+        // Allow removal for players beyond the first two
+        if (idx >= 2) {
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'remove-btn';
+          removeBtn.textContent = 'Remove';
+          removeBtn.addEventListener('click', () => {
+            players.splice(idx, 1);
+            renderPlayers();
+          });
+          row.appendChild(removeBtn);
+        }
+
+        list.appendChild(row);
+      });
+    }
+
+    renderPlayers();
+
+    const actions = document.createElement('div');
+    actions.className = 'menu-actions';
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-btn';
+    addBtn.textContent = '+ Add Player';
+    addBtn.addEventListener('click', () => {
+      if (players.length >= presets.length) return;
+      players.push(Object.assign({}, presets[players.length]));
+      renderPlayers();
+    });
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'ghost';
+    resetBtn.textContent = 'Reset Menu';
+    resetBtn.addEventListener('click', () => {
+      players.length = 2;
+      players[0] = Object.assign({}, presets[0]);
+      players[1] = Object.assign({}, presets[1]);
+      renderPlayers();
+    });
+
+    const startBtn = document.createElement('button');
+    startBtn.className = 'primary';
+    startBtn.textContent = 'Start Game';
+    startBtn.addEventListener('click', () => {
+      // Persist chosen settings and mark first-start as done.
+      try {
+        localStorage.setItem('firstStartDone', 'true');
+        localStorage.setItem('playerConfig', JSON.stringify(players.map(p => ({ name: p.name, color: p.color, controls: p.controls }))));
+      } catch (e) {
+        console.warn('Could not save first-start settings:', e);
+      }
+      // Remove overlay and reload so the game initializes with the chosen configuration.
+      // Reload is simple and keeps existing game initialization intact.
+      try { document.body.removeChild(overlay); } catch(e) {}
+      location.reload();
+    });
+
+    actions.appendChild(addBtn);
+    actions.appendChild(resetBtn);
+    actions.appendChild(startBtn);
+
+    menu.appendChild(title);
+    menu.appendChild(description);
+    menu.appendChild(list);
+    menu.appendChild(actions);
+    overlay.appendChild(menu);
+    document.body.appendChild(overlay);
+  } catch (err) {
+    // Fail silently — menu is optional and must not break the game
+    console.error('First-start menu failed to initialize:', err);
+  }
+})();
+
 // Function to generate random starting positions and angles for snakes
 function generateRandomStartingPosition() {
   const viewSize = 10;
@@ -96,107 +292,232 @@ class Trail {
   get length() { return this._count; }
 }
 
-window.gameState = {
-  gameOverLogged: false, // Flag to prevent multiple game over messages
-  player1: {
-    snakePosition: { x: player1Start.x, y: player1Start.y }, // Random starting position
-    snakeDirection: player1Start.direction, // Random starting direction
-    snakeSpeed: 0.02, // Movement speed
-    turnSpeed: 3, // Degrees per frame when turning
-    isAlive: true,
-    trail: new Trail(1000, player1Start.x, player1Start.y), // Ring-buffer trail
-    isTurningLeft: false,
-    isTurningRight: false,
-    color: [1.0, 0.2, 0.2, 1.0] // Red color
-  },
-  player2: {
-    snakePosition: { x: player2Start.x, y: player2Start.y }, // Random starting position
-    snakeDirection: player2Start.direction, // Random starting direction
+/*
+  Build runtime game state from saved first-start playerConfig.
+  Falls back to two-player default to keep existing gameplay unchanged.
+*/
+function hexToRgbArray(hex) {
+  if (!hex) return [1.0, 1.0, 1.0, 1.0];
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  return [r, g, b, 1.0];
+}
+
+const savedConfig = (() => {
+  try {
+    return JSON.parse(localStorage.getItem('playerConfig') || 'null');
+  } catch (e) {
+    return null;
+  }
+})();
+
+const defaultConfig = [
+  { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' },
+  { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' }
+];
+
+const effectiveConfig = (Array.isArray(savedConfig) && savedConfig.length >= 2) ? savedConfig : defaultConfig;
+
+// Build players array; use existing player1Start/player2Start for the first two so behavior remains stable
+const players = effectiveConfig.map((cfg, idx) => {
+  const start = (idx === 0) ? player1Start : (idx === 1) ? player2Start : generateRandomStartingPosition();
+  return {
+    id: idx + 1,
+    name: cfg.name || `Player ${idx + 1}`,
+    snakePosition: { x: start.x, y: start.y },
+    snakeDirection: start.direction,
     snakeSpeed: 0.02,
     turnSpeed: 3,
     isAlive: true,
-    trail: new Trail(1000, player2Start.x, player2Start.y),
+    trail: new Trail(1000, start.x, start.y),
     isTurningLeft: false,
     isTurningRight: false,
-    color: [0.2, 0.2, 1.0, 1.0] // Blue color
+    color: hexToRgbArray(cfg.color),
+    controls: cfg.controls || (idx === 1 ? 'Mouse Left / Mouse Right' : 'ArrowLeft / ArrowRight')
+  };
+});
+
+window.gameState = {
+  gameOverLogged: false,
+  players
+};
+
+// Backwards-compatible aliases used by existing code
+window.gameState.player1 = window.gameState.players[0];
+window.gameState.player2 = window.gameState.players[1];
+
+// Update the on-screen controls-info panel to reflect configured players
+(function updateControlsInfoUI(playersList) {
+  try {
+    const container = document.querySelector('.controls-info');
+    if (!container) return;
+    const title = container.querySelector('h2');
+    if (title) title.textContent = 'Achtung die Kurve - Players';
+    const existing = container.querySelector('.player-controls');
+    if (existing) existing.remove();
+
+    const playerControls = document.createElement('div');
+    playerControls.className = 'player-controls';
+    playersList.forEach((p) => {
+      const div = document.createElement('div');
+      div.className = `player${p.id}`;
+      div.style.background = 'rgba(255,255,255,0.03)';
+      div.style.padding = '8px';
+      div.style.borderRadius = '6px';
+      div.style.minWidth = '160px';
+      const h3 = document.createElement('h3');
+      const sw = document.createElement('span');
+      sw.style.display = 'inline-block';
+      sw.style.width = '12px';
+      sw.style.height = '12px';
+      sw.style.marginRight = '8px';
+      sw.style.verticalAlign = 'middle';
+      const r = Math.round(p.color[0] * 255);
+      const g = Math.round(p.color[1] * 255);
+      const b = Math.round(p.color[2] * 255);
+      sw.style.background = `rgb(${r}, ${g}, ${b})`;
+      h3.appendChild(sw);
+      const text = document.createTextNode(`${p.name}`);
+      h3.appendChild(text);
+
+      const p1 = document.createElement('p');
+      p1.textContent = `Controls: ${p.controls}`;
+      p1.style.margin = '6px 0 0 0';
+      p1.style.fontSize = '14px';
+
+      div.appendChild(h3);
+      div.appendChild(p1);
+      playerControls.appendChild(div);
+    });
+
+    const gameInfo = container.querySelector('.game-info');
+    if (gameInfo) container.insertBefore(playerControls, gameInfo);
+    else container.appendChild(playerControls);
+  } catch (e) {
+    // silent
   }
-};
+})(window.gameState.players);
 
-// Add controls for both players
-const controls = {
-  player1: {
-    left: 'ArrowLeft',
-    right: 'ArrowRight',
-  },
-  // Player 2 will use mouse controls (implemented below)
-};
+/*
+  Input mapping across configured players.
+  controlsMap maps key/code strings (lowercased) to { playerIndex, side }.
+  mousePlayerIndex is set if a player's control scheme uses the mouse.
+*/
+const controlsMap = new Map();
+let mousePlayerIndex = null;
 
-// Mouse state for player 2
+function buildInputMappings() {
+  controlsMap.clear();
+  mousePlayerIndex = null;
+  const playersArr = window.gameState.players || [];
+  playersArr.forEach((p, idx) => {
+    const cfg = (p.controls || '').toLowerCase();
+    if (cfg.includes('arrow')) {
+      controlsMap.set('arrowleft', { playerIndex: idx, side: 'left' });
+      controlsMap.set('arrowright', { playerIndex: idx, side: 'right' });
+      // Some browsers may expose arrow keys via event.code too
+      controlsMap.set('arrowleft', { playerIndex: idx, side: 'left' });
+      controlsMap.set('arrowright', { playerIndex: idx, side: 'right' });
+    } else if (cfg.includes('mouse')) {
+      mousePlayerIndex = idx;
+    } else if (cfg.includes('a / d') || (cfg.includes('a') && cfg.includes('d'))) {
+      controlsMap.set('a', { playerIndex: idx, side: 'left' });
+      controlsMap.set('d', { playerIndex: idx, side: 'right' });
+      controlsMap.set('A', { playerIndex: idx, side: 'left' });
+      controlsMap.set('D', { playerIndex: idx, side: 'right' });
+    } else if (cfg.includes('num4') || cfg.includes('num6') || cfg.includes('numpad')) {
+      controlsMap.set('numpad4', { playerIndex: idx, side: 'left' });
+      controlsMap.set('numpad6', { playerIndex: idx, side: 'right' });
+      controlsMap.set('4', { playerIndex: idx, side: 'left' });
+      controlsMap.set('6', { playerIndex: idx, side: 'right' });
+    } else if (cfg.includes('j / l') || (cfg.includes('j') && cfg.includes('l'))) {
+      controlsMap.set('j', { playerIndex: idx, side: 'left' });
+      controlsMap.set('l', { playerIndex: idx, side: 'right' });
+      controlsMap.set('J', { playerIndex: idx, side: 'left' });
+      controlsMap.set('L', { playerIndex: idx, side: 'right' });
+    }
+  });
+}
+
+// Build initial mappings
+buildInputMappings();
+
+// Mouse state (generic)
 let mouseState = {
   isPressed: false,
   leftButton: false,
-  rightButton: false,
-  x: 0,
-  y: 0
+  rightButton: false
 };
 
-// Handle key press events (start turning) - Player 1
+// Keyboard handling for all mapped players
 document.addEventListener('keydown', (event) => {
   // Reset game with 'R' key - only if all players are dead
   if (event.key === 'r' || event.key === 'R') {
-    if (!window.gameState.player1.isAlive && !window.gameState.player2.isAlive) {
-      resetGame();
-    }
+    const allDead = (window.gameState.players || []).every(p => !p.isAlive);
+    if (allDead) resetGame();
     return;
   }
-  
-  if (!window.gameState.player1.isAlive) return;
-  
-  if (event.key === controls.player1.left && !window.gameState.player1.isTurningLeft) {
-    window.gameState.player1.isTurningLeft = true;
-  } else if (event.key === controls.player1.right && !window.gameState.player1.isTurningRight) {
-    window.gameState.player1.isTurningRight = true;
+
+  const keyId = (event.key || '').toLowerCase();
+  const codeId = (event.code || '').toLowerCase();
+  const mapped = controlsMap.get(keyId) || controlsMap.get(codeId);
+  if (mapped) {
+    const player = window.gameState.players[mapped.playerIndex];
+    if (!player || !player.isAlive) return;
+    if (mapped.side === 'left') player.isTurningLeft = true;
+    else player.isTurningRight = true;
   }
 });
 
-// Handle key release events (stop turning) - Player 1
+// Keyup handling
 document.addEventListener('keyup', (event) => {
-  if (event.key === controls.player1.left) {
-    window.gameState.player1.isTurningLeft = false;
-  } else if (event.key === controls.player1.right) {
-    window.gameState.player1.isTurningRight = false;
+  const keyId = (event.key || '').toLowerCase();
+  const codeId = (event.code || '').toLowerCase();
+  const mapped = controlsMap.get(keyId) || controlsMap.get(codeId);
+  if (mapped) {
+    const player = window.gameState.players[mapped.playerIndex];
+    if (!player) return;
+    if (mapped.side === 'left') player.isTurningLeft = false;
+    else player.isTurningRight = false;
   }
 });
 
-// Mouse controls for Player 2
+// Mouse handling for the mouse-controlled player (if any)
 document.addEventListener('mousedown', (event) => {
-  if (!window.gameState.player2.isAlive) return;
-  
+  if (mousePlayerIndex === null) return;
+  const player = window.gameState.players[mousePlayerIndex];
+  if (!player || !player.isAlive) return;
+
   mouseState.isPressed = true;
-  
+
   if (event.button === 0) { // Left mouse button
     mouseState.leftButton = true;
-    window.gameState.player2.isTurningLeft = true;
+    player.isTurningLeft = true;
   } else if (event.button === 2) { // Right mouse button
     mouseState.rightButton = true;
-    window.gameState.player2.isTurningRight = true;
+    player.isTurningRight = true;
   }
-  
-  event.preventDefault(); // Prevent context menu on right click
+
+  event.preventDefault();
 });
 
 document.addEventListener('mouseup', (event) => {
-  if (event.button === 0) { // Left mouse button
+  if (mousePlayerIndex === null) return;
+  const player = window.gameState.players[mousePlayerIndex];
+  if (!player) return;
+
+  if (event.button === 0) {
     mouseState.leftButton = false;
-    window.gameState.player2.isTurningLeft = false;
-  } else if (event.button === 2) { // Right mouse button
+    player.isTurningLeft = false;
+  } else if (event.button === 2) {
     mouseState.rightButton = false;
-    window.gameState.player2.isTurningRight = false;
+    player.isTurningRight = false;
   }
-  
-  if (!mouseState.leftButton && !mouseState.rightButton) {
-    mouseState.isPressed = false;
-  }
+
+  if (!mouseState.leftButton && !mouseState.rightButton) mouseState.isPressed = false;
 });
 
 // Prevent context menu on right click
