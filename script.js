@@ -514,7 +514,9 @@ const players = effectiveConfig.map((cfg, idx) => {
     isTurningLeft: false,
     isTurningRight: false,
     color: hexToRgbArray(cfg.color),
-    controls: cfg.controls || (idx === 1 ? 'Mouse Left / Mouse Right' : 'ArrowLeft / ArrowRight')
+    controls: cfg.controls || (idx === 1 ? 'Mouse Left / Mouse Right' : 'ArrowLeft / ArrowRight'),
+    score: 0,
+    _deathProcessed: false
   };
 });
 
@@ -541,8 +543,30 @@ occupancyGrid.updateBounds(
   window.gameState.frameCounter
 );
 
+function awardPointsForDeath(deadPlayer) {
+  try {
+    if (!deadPlayer || !deadPlayer.id) return;
+    const state = window.gameState;
+    if (!state || !Array.isArray(state.players)) return;
+    // Avoid awarding multiple times for the same death instance
+    if (deadPlayer._deathProcessed) return;
+    deadPlayer._deathProcessed = true;
+    // Award only to other players that are currently alive (dead snakes must not gain points)
+    state.players.forEach((p) => {
+      if (!p) return;
+      if (p.id !== deadPlayer.id && p.isAlive) {
+        p.score = (Number(p.score) || 0) + 1;
+      }
+    });
+    // Refresh controls UI
+    try { if (typeof window.updateControlsInfoUI === 'function') window.updateControlsInfoUI(state.players); } catch (e) {}
+  } catch (e) {
+    // silent
+  }
+}
+
 // Update the on-screen controls-info panel to reflect configured players
-(function updateControlsInfoUI(playersList) {
+function updateControlsInfoUI(playersList) {
   try {
     const container = document.querySelector('.controls-info');
     if (!container) return;
@@ -573,8 +597,17 @@ occupancyGrid.updateBounds(
       const b = Math.round(p.color[2] * 255);
       sw.style.background = `rgb(${r}, ${g}, ${b})`;
       h3.appendChild(sw);
-      const text = document.createTextNode(`${p.name}`);
-      h3.appendChild(text);
+      const nameNode = document.createTextNode(`${p.name}`);
+      h3.appendChild(nameNode);
+
+      // score display
+      const scoreSpan = document.createElement('span');
+      scoreSpan.className = 'player-score';
+      scoreSpan.style.marginLeft = '8px';
+      scoreSpan.style.fontWeight = '700';
+      scoreSpan.style.color = '#fff';
+      scoreSpan.textContent = `${(p.score != null) ? p.score : 0}`;
+      h3.appendChild(scoreSpan);
 
       const p1 = document.createElement('p');
       p1.textContent = `Controls: ${p.controls}`;
@@ -592,7 +625,9 @@ occupancyGrid.updateBounds(
   } catch (e) {
     // silent
   }
-})(window.gameState.players);
+}
+updateControlsInfoUI(window.gameState.players);
+window.updateControlsInfoUI = updateControlsInfoUI;
 
 /*
   Input mapping across configured players.
@@ -761,6 +796,7 @@ function resetGame() {
     player.trail = new Trail(1024, start.x, start.y);
     player.isTurningLeft = false;
     player.isTurningRight = false;
+    player._deathProcessed = false;
   });
 
   state.player1 = state.players[0];
@@ -794,6 +830,7 @@ function forceReset() {
     player.trail = new Trail(1024, start.x, start.y);
     player.isTurningLeft = false;
     player.isTurningRight = false;
+    player._deathProcessed = false;
   });
 
   state.player1 = state.players[0];
@@ -913,11 +950,13 @@ function updatePlayer(player, deltaSeconds) {
   const bounds = computeViewBounds();
   if (newX < bounds.minX || newX > bounds.maxX || newY < bounds.minY || newY > bounds.maxY) {
     player.isAlive = false;
+    awardPointsForDeath(player);
     return;
   }
 
   if (checkTrailCollision(newX, newY, player)) {
     player.isAlive = false;
+    awardPointsForDeath(player);
     return;
   }
 
