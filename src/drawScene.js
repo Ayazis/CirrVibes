@@ -1,43 +1,23 @@
 // Logic for drawing the scene - Achtung die Kurve style (instanced segment quad expansion)
 import { mat4 } from './mat4.js';
+import { resizeCanvasToDisplaySize } from './gameCanvas.js';
+
+const TRAIL_WIDTH = 0.05;
+const VERTS_PER_SEGMENT = 6;
+const FLOATS_PER_VERTEX = 5;
+const FLOATS_PER_SEGMENT = VERTS_PER_SEGMENT * FLOATS_PER_VERTEX;
+const CORNER_SEQUENCE = new Float32Array([0, 1, 2, 0, 2, 3]);
 
 export const drawScene = (gl, canvas) => {
-  gl.clearColor(0.0, 0.0, 0.0, 1.0);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  if (!gl || !canvas) return;
 
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-  if (!window.gameState) {
-    function generateRandomStartingPosition() {
-      const viewSize = 10;
-      const aspect = canvas.width / canvas.height;
-      const horizontalBoundary = viewSize * aspect;
-      const verticalBoundary = viewSize;
-      const safeMargin = 1;
-      const x = (Math.random() - 0.5) * 2 * (horizontalBoundary - safeMargin);
-      const y = (Math.random() - 0.5) * 2 * (verticalBoundary - safeMargin);
-      const direction = Math.random() * 360;
-      return { x, y, direction };
-    }
-const maxPlayers = 8;
-window.gameState = {};
-for (let i = 1; i <= maxPlayers; i++) {
-  const start = generateRandomStartingPosition();
-  window.gameState[`player${i}`] = {
-    snakePosition: { x: start.x, y: start.y },
-    snakeDirection: start.direction,
-    trail: window.Trail ? new window.Trail(1000, start.x, start.y) : [{ x: start.x, y: start.y }],
-    isAlive: true,
-    color: [Math.random(), Math.random(), Math.random(), 1.0] // Random color for each player
-  };
-}
-  }
-
-  // Buffer setup
   const segmentBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
 
   // Vertex shader for quad expansion (each segment = 4 vertices, 2 triangles)
   const vertexShaderSource = `
@@ -67,23 +47,31 @@ for (let i = 1; i <= maxPlayers; i++) {
     }
   `;
 
-  // Shader/program setup
-  const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-  gl.shaderSource(vertexShader, vertexShaderSource);
-  gl.compileShader(vertexShader);
-  if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {}
+  const compileShader = (type, source) => {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+      gl.deleteShader(shader);
+      return null;
+    }
+    return shader;
+  };
 
-  const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-  gl.shaderSource(fragmentShader, fragmentShaderSource);
-  gl.compileShader(fragmentShader);
-  if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {}
+  const vertexShader = compileShader(gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+  if (!vertexShader || !fragmentShader) return;
 
   const program = gl.createProgram();
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {}
-
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return;
+  }
   gl.useProgram(program);
 
   const startLocation = gl.getAttribLocation(program, 'start');
@@ -94,15 +82,82 @@ for (let i = 1; i <= maxPlayers; i++) {
   const modelViewMatrixLocation = gl.getUniformLocation(program, 'modelViewMatrix');
   const projectionMatrixLocation = gl.getUniformLocation(program, 'projectionMatrix');
 
-  const modelViewMatrix = mat4.create();
-  const projectionMatrix = mat4.create();
+  gl.enableVertexAttribArray(startLocation);
+  gl.enableVertexAttribArray(endLocation);
+  gl.enableVertexAttribArray(cornerLocation);
+  gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 0);
+  gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 8);
+  gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 16);
 
-  const viewSize = 10;
-  const applyMatrices = () => {
+  let modelViewMatrix = mat4.create();
+  let projectionMatrix = mat4.create();
+
+  let quadScratch = new Float32Array(FLOATS_PER_SEGMENT * 16);
+  let bufferCapacityChanged = true;
+  let needsViewUpdate = true;
+  let lastDpr = window.devicePixelRatio || 1;
+
+  const prevPoint = { x: 0, y: 0 };
+  const currPoint = { x: 0, y: 0 };
+
+  const ensureScratchCapacity = (requiredFloats) => {
+    if (requiredFloats <= quadScratch.length) return;
+    let newLength = quadScratch.length || FLOATS_PER_SEGMENT;
+    while (newLength < requiredFloats) newLength *= 2;
+    quadScratch = new Float32Array(newLength);
+    bufferCapacityChanged = true;
+  };
+
+  const writeSegment = (offset, ax, ay, bx, by) => {
+    for (let i = 0; i < CORNER_SEQUENCE.length; i++) {
+      quadScratch[offset++] = ax;
+      quadScratch[offset++] = ay;
+      quadScratch[offset++] = bx;
+      quadScratch[offset++] = by;
+      quadScratch[offset++] = CORNER_SEQUENCE[i];
+    }
+    return offset;
+  };
+
+  const buildTrailVertices = (trail) => {
+    if (!trail || typeof trail.length !== 'number' || trail.length < 2) return 0;
+    const segmentCount = trail.length - 1;
+    const requiredFloats = segmentCount * FLOATS_PER_SEGMENT;
+    ensureScratchCapacity(requiredFloats);
+
+    let offset = 0;
+    if (typeof trail.get === 'function') {
+      for (let i = 1; i < trail.length; i++) {
+        const prev = trail.get(i - 1, prevPoint);
+        const curr = trail.get(i, currPoint);
+        if (!prev || !curr) continue;
+        offset = writeSegment(offset, prev.x, prev.y, curr.x, curr.y);
+      }
+    } else if (Array.isArray(trail)) {
+      for (let i = 1; i < trail.length; i++) {
+        const prev = trail[i - 1];
+        const curr = trail[i];
+        if (!prev || !curr || typeof prev.x !== 'number' || typeof curr.x !== 'number') continue;
+        offset = writeSegment(offset, prev.x, prev.y, curr.x, curr.y);
+      }
+    }
+    return offset;
+  };
+
+  const updateView = () => {
+    if (!canvas.width || !canvas.height) return;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
+    if (!modelViewMatrix) modelViewMatrix = mat4.create();
+    if (!projectionMatrix) projectionMatrix = mat4.create();
+    mat4.identity(modelViewMatrix);
+
+    const state = window.gameState;
+    const viewSize = state?.viewSize ?? 10;
     const aspect = canvas.width / canvas.height;
     const horizontalBoundary = viewSize * aspect;
     const verticalBoundary = viewSize;
-    mat4.identity(modelViewMatrix);
+
     mat4.ortho(
       projectionMatrix,
       -horizontalBoundary,
@@ -112,70 +167,78 @@ for (let i = 1; i <= maxPlayers; i++) {
       -1,
       1
     );
-    gl.viewport(0, 0, canvas.width, canvas.height);
+
     gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
     gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix);
+
+    if (state) {
+      state.viewBounds = {
+        minX: -horizontalBoundary,
+        maxX: horizontalBoundary,
+        minY: -verticalBoundary,
+        maxY: verticalBoundary
+      };
+      if (state.occupancyGrid) {
+        state.occupancyGrid.updateBounds(
+          state.viewBounds.minX,
+          state.viewBounds.maxX,
+          state.viewBounds.minY,
+          state.viewBounds.maxY,
+          state.players,
+          state.frameCounter
+        );
+      }
+    }
   };
 
-  applyMatrices();
-
   window.addEventListener('resize', () => {
-    gl.canvas.width = window.innerWidth * 0.8;
-    gl.canvas.height = window.innerHeight * 0.8;
-    applyMatrices();
+    needsViewUpdate = true;
   });
 
-  function animate() {
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    applyMatrices();
+  const renderFrame = () => {
+    if (resizeCanvasToDisplaySize(canvas)) {
+      needsViewUpdate = true;
+    }
+
+    const currentDpr = window.devicePixelRatio || 1;
+    if (currentDpr !== lastDpr) {
+      lastDpr = currentDpr;
+      needsViewUpdate = true;
+    }
+
+    if (needsViewUpdate) {
+      updateView();
+      needsViewUpdate = false;
+    }
+
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
     const state = window.gameState;
-    if (!state) {
-      requestAnimationFrame(animate);
+    const players = state?.players;
+    if (!players || players.length === 0) {
+      requestAnimationFrame(renderFrame);
       return;
     }
 
-    // Build quad buffer: for each segment, 4 vertices (start/end/corner)
-    function extractQuads(trail) {
-      const quads = [];
-      if (!trail || typeof trail.get !== 'function' || typeof trail.length !== 'number') return quads;
-      for (let i = 1; i < trail.length; i++) {
-        const prev = trail.get(i - 1);
-        const curr = trail.get(i);
-        if (!prev || !curr || prev.x === undefined || prev.y === undefined || curr.x === undefined || curr.y === undefined) continue;
-        // Build two triangles per segment (6 vertices: 0-1-2, 0-2-3)
-        quads.push(prev.x, prev.y, curr.x, curr.y, 0);
-        quads.push(prev.x, prev.y, curr.x, curr.y, 1);
-        quads.push(prev.x, prev.y, curr.x, curr.y, 2);
-        quads.push(prev.x, prev.y, curr.x, curr.y, 0);
-        quads.push(prev.x, prev.y, curr.x, curr.y, 2);
-        quads.push(prev.x, prev.y, curr.x, curr.y, 3);
+    gl.uniform1f(trailWidthLocation, TRAIL_WIDTH);
+
+    for (let i = 0; i < players.length; i++) {
+      const player = players[i];
+      const usedFloats = buildTrailVertices(player.trail);
+      if (usedFloats === 0) continue;
+
+      if (bufferCapacityChanged) {
+        gl.bufferData(gl.ARRAY_BUFFER, quadScratch.byteLength, gl.DYNAMIC_DRAW);
+        bufferCapacityChanged = false;
       }
-      return quads;
+
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, quadScratch.subarray(0, usedFloats));
+      gl.uniform4fv(baseColorLocation, player.color);
+      gl.drawArrays(gl.TRIANGLES, 0, usedFloats / FLOATS_PER_VERTEX);
     }
 
-Object.keys(state).forEach(playerKey => {
-  const player = state[playerKey];
-  const playerQuads = extractQuads(player.trail);
-  if (playerQuads.length > 0) {
-    const quadArray = new Float32Array(playerQuads);
-    gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, quadArray, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(startLocation);
-    gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, 20, 0);
-    gl.enableVertexAttribArray(endLocation);
-    gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, 20, 8);
-    gl.enableVertexAttribArray(cornerLocation);
-    gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, 20, 16);
-    gl.uniform1f(trailWidthLocation, 0.05);
-    gl.uniform4fv(baseColorLocation, player.color);
-    gl.drawArrays(gl.TRIANGLES, 0, quadArray.length / 5);
-  }
-});
+    requestAnimationFrame(renderFrame);
+  };
 
-    requestAnimationFrame(animate);
-  }
-
-  animate();
+  requestAnimationFrame(renderFrame);
 };
