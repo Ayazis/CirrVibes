@@ -1,9 +1,9 @@
 // Game initialization logic
 import { setupCanvas } from './gameCanvas.js';
-import { draw3DScene } from './draw3DScene.js';
+import { drawScene } from './drawScene.js';
 
 export const initGame = () => {
   const canvas = setupCanvas('gameCanvas');
   const gl = canvas.getContext('webgl');
-  draw3DScene(gl, canvas);
+  drawScene(gl, canvas);
 };

@@ -10,21 +10,23 @@
   <div class="controls-info">
     <h2>Achtung die Kurve - Two Player Edition</h2>
     <div class="player-controls">
-      <div class="player1">
-        <h3>Player 1 (Red)</h3>
+      <div class="player1 player-card">
+        <h3><span class="swatch" style="width:12px;height:12px;background:#ff6666;display:inline-block;border-radius:2px;margin-right:8px;"></span>Player 1 (Red)</h3>
         <p>Left Arrow: Turn Left</p>
         <p>Right Arrow: Turn Right</p>
       </div>
-      <div class="player2">
-        <h3>Player 2 (Blue)</h3>
+      <div class="player2 player-card">
+        <h3><span class="swatch" style="width:12px;height:12px;background:#6666ff;display:inline-block;border-radius:2px;margin-right:8px;"></span>Player 2 (Blue)</h3>
         <p>Left Mouse Button: Turn Left</p>
         <p>Right Mouse Button: Turn Right</p>
       </div>
     </div>
     <div class="game-info">
-      <p><strong>Press 'R' to reset (only when both players are dead)</strong></p>
-      <p>Avoid hitting boundaries and trails. Dead snakes become semi-transparent.</p>
+      <p>Avoid hitting boundaries and trails.</p>
     </div>
+      <div class="interface-actions">
+        <button id="openPlayerMenuBtn" class="ghost">Player Selection</button>
+      </div>
   </div>
   <canvas id="gameCanvas"></canvas>
 <script type="module" src="script.js"></script>

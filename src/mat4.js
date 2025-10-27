@@ -1,11 +1,20 @@
 // Utility functions for matrix operations
+const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+const pool = [];
+
 export const mat4 = {
-  create: () => new Float32Array(16).fill(0).map((_, i) => (i % 5 === 0 ? 1 : 0)),
+  create: () => {
+    const out = pool.length ? pool.pop() : new Float32Array(16);
+    out.set(IDENTITY);
+    return out;
+  },
+  release: (mat) => {
+    if (mat instanceof Float32Array && mat.length === 16) {
+      pool.push(mat);
+    }
+  },
   identity: (out) => {
-    out[0] = 1; out[1] = 0; out[2] = 0; out[3] = 0;
-    out[4] = 0; out[5] = 1; out[6] = 0; out[7] = 0;
-    out[8] = 0; out[9] = 0; out[10] = 1; out[11] = 0;
-    out[12] = 0; out[13] = 0; out[14] = 0; out[15] = 1;
+    out.set(IDENTITY);
     return out;
   },
   ortho: (out, left, right, bottom, top, near, far) => {

@@ -1,0 +1,22 @@
+# Performance Refactor TODO List
+
+- [x] Analyze current code for performance bottlenecks
+- [x] Fix trail loop bug (iterate over player.trail[i] objects, not (cx, cy) parms)
+- [x] Disable depth test; enable blending only when needed
+- [x] Cache projectionMatrix/modelViewMatrix; compute once and on resize only
+- [x] Change dynamic buffers to gl.DYNAMIC_DRAW and use bufferSubData with pooled Float32Array
+- [x] Make walls static VBO/IBO prepared outside the frame loop
+- [x] Replace mat4.create() allocation strategy with a static identity or pooled matrices
+- [x] Implement typed-array pooling for trail segments
+- [x] Apply buffer orphaning pattern for dynamic buffers
+- [x] Remove color buffer; use uniform baseColor and compute gradient in shader
+- [x] Use VAOs (WebGL2) or emulate with binding order (WebGL1)
+- [x] Decide on rendering model: Option B (instanced segments)
+- [x] Implement chosen rendering model for trails (instanced segments: start/end points, quad expansion in shader)
+- [x] Refactor game logic to use fixed timestep update
+- [x] Implement occupancy grid for O(1) collision tests
+- [x] Use ring buffers for trails; cap stored points per player
+- [x] Make canvas Hi-DPI aware and handle resize
+- [x] Separate GL state initialization from draw loop
+- [x] Minimize GL state changes per frame
+- [ ] Test and verify performance improvements
