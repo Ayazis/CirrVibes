@@ -396,11 +396,24 @@ class OccupancyGrid {
       if (row < 0 || row >= this.rows) continue;
       for (let col = minCol; col <= maxCol; col++) {
         if (col < 0 || col >= this.cols) continue;
+        if (!this._circleIntersectsCell(x, y, radius, col, row)) continue;
         const idx = row * this.cols + col;
         this.ages[idx] = frame;
         this.owners[idx] = playerId;
       }
     }
+  }
+
+  _circleIntersectsCell(cx, cy, radius, col, row) {
+    const cellMinX = this.minX + col * this.cellSize;
+    const cellMinY = this.minY + row * this.cellSize;
+    const cellMaxX = cellMinX + this.cellSize;
+    const cellMaxY = cellMinY + this.cellSize;
+    const closestX = Math.max(cellMinX, Math.min(cx, cellMaxX));
+    const closestY = Math.max(cellMinY, Math.min(cy, cellMaxY));
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+    return (dx * dx + dy * dy) <= radius * radius;
   }
 
   checkCollision(x, y, radius, playerId, frame) {
@@ -412,6 +425,7 @@ class OccupancyGrid {
       if (row < 0 || row >= this.rows) continue;
       for (let col = minCol; col <= maxCol; col++) {
         if (col < 0 || col >= this.cols) continue;
+        if (!this._circleIntersectsCell(x, y, radius, col, row)) continue;
         const idx = row * this.cols + col;
         const owner = this.owners[idx];
         if (!owner) continue;
