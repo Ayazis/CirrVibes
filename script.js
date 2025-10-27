@@ -201,6 +201,7 @@ const DEFAULT_ASPECT = 16 / 9;
 const TRAIL_WIDTH = 0.05;
 const TRAIL_COLLISION_RADIUS = 0.06;
 const TRAIL_SAFE_FRAMES = 10;
+const MAX_CELL_STAMPS = 4;
 const FIXED_TIMESTEP_MS = 1000 / 60;
 
 function getCanvasAspect() {
@@ -326,13 +327,22 @@ class OccupancyGrid {
     this.rows = Math.max(1, Math.ceil(height / this.cellSize));
     this.invCellSize = 1 / this.cellSize;
     const size = this.cols * this.rows;
-    this.ages = new Uint32Array(size);
-    this.owners = new Uint8Array(size);
+    const slots = size * MAX_CELL_STAMPS;
+    this.stampCount = new Uint8Array(size);
+    this.stampX = new Float32Array(slots);
+    this.stampY = new Float32Array(slots);
+    this.stampRadius = new Float32Array(slots);
+    this.stampOwner = new Uint16Array(slots);
+    this.stampAge = new Uint32Array(slots);
   }
 
   clear() {
-    this.ages.fill(0);
-    this.owners.fill(0);
+    this.stampCount.fill(0);
+    this.stampX.fill(0);
+    this.stampY.fill(0);
+    this.stampRadius.fill(0);
+    this.stampOwner.fill(0);
+    this.stampAge.fill(0);
   }
 
   updateBounds(minX, maxX, minY, maxY, players, frame = 0) {
@@ -396,11 +406,50 @@ class OccupancyGrid {
       if (row < 0 || row >= this.rows) continue;
       for (let col = minCol; col <= maxCol; col++) {
         if (col < 0 || col >= this.cols) continue;
+        if (!this._circleIntersectsCell(x, y, radius, col, row)) continue;
         const idx = row * this.cols + col;
-        this.ages[idx] = frame;
-        this.owners[idx] = playerId;
+        this._writeStamp(idx, x, y, radius, playerId, frame);
       }
     }
+  }
+
+  _writeStamp(idx, x, y, radius, playerId, frame) {
+    const base = idx * MAX_CELL_STAMPS;
+    let count = this.stampCount[idx];
+    let slot;
+    if (count < MAX_CELL_STAMPS) {
+      slot = base + count;
+      this.stampCount[idx] = count + 1;
+    } else {
+      slot = base;
+      let oldestAge = this.stampAge[slot];
+      for (let i = 1; i < MAX_CELL_STAMPS; i++) {
+        const candidate = base + i;
+        const candidateAge = this.stampAge[candidate];
+        if (candidateAge < oldestAge) {
+          slot = candidate;
+          oldestAge = candidateAge;
+        }
+      }
+    }
+
+    this.stampX[slot] = x;
+    this.stampY[slot] = y;
+    this.stampRadius[slot] = radius;
+    this.stampOwner[slot] = playerId;
+    this.stampAge[slot] = frame;
+  }
+
+  _circleIntersectsCell(cx, cy, radius, col, row) {
+    const cellMinX = this.minX + col * this.cellSize;
+    const cellMinY = this.minY + row * this.cellSize;
+    const cellMaxX = cellMinX + this.cellSize;
+    const cellMaxY = cellMinY + this.cellSize;
+    const closestX = Math.max(cellMinX, Math.min(cx, cellMaxX));
+    const closestY = Math.max(cellMinY, Math.min(cy, cellMaxY));
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+    return (dx * dx + dy * dy) <= radius * radius;
   }
 
   checkCollision(x, y, radius, playerId, frame) {
@@ -412,13 +461,26 @@ class OccupancyGrid {
       if (row < 0 || row >= this.rows) continue;
       for (let col = minCol; col <= maxCol; col++) {
         if (col < 0 || col >= this.cols) continue;
+        if (!this._circleIntersectsCell(x, y, radius, col, row)) continue;
         const idx = row * this.cols + col;
-        const owner = this.owners[idx];
-        if (!owner) continue;
-        if (owner !== playerId) return true;
-        const age = this.ages[idx];
-        if (frame > age && frame - age > this.ownSafeFrames) {
-          return true;
+        const count = this.stampCount[idx];
+        if (!count) continue;
+        const base = idx * MAX_CELL_STAMPS;
+        for (let i = 0; i < count; i++) {
+          const slot = base + i;
+          const owner = this.stampOwner[slot];
+          if (!owner) continue;
+          const storedRadius = this.stampRadius[slot];
+          const combinedRadius = radius + storedRadius;
+          if (combinedRadius <= 0) continue;
+          const dx = x - this.stampX[slot];
+          const dy = y - this.stampY[slot];
+          if ((dx * dx + dy * dy) > combinedRadius * combinedRadius) continue;
+          if (owner !== playerId) return true;
+          const age = this.stampAge[slot];
+          if (frame > age && frame - age > this.ownSafeFrames) {
+            return true;
+          }
         }
       }
     }
