@@ -328,11 +328,17 @@ class OccupancyGrid {
     const size = this.cols * this.rows;
     this.ages = new Uint32Array(size);
     this.owners = new Uint8Array(size);
+    this.sampleX = new Float32Array(size);
+    this.sampleY = new Float32Array(size);
+    this.sampleRadius = new Float32Array(size);
   }
 
   clear() {
     this.ages.fill(0);
     this.owners.fill(0);
+    this.sampleX.fill(0);
+    this.sampleY.fill(0);
+    this.sampleRadius.fill(0);
   }
 
   updateBounds(minX, maxX, minY, maxY, players, frame = 0) {
@@ -400,6 +406,9 @@ class OccupancyGrid {
         const idx = row * this.cols + col;
         this.ages[idx] = frame;
         this.owners[idx] = playerId;
+        this.sampleX[idx] = x;
+        this.sampleY[idx] = y;
+        this.sampleRadius[idx] = radius;
       }
     }
   }
@@ -429,6 +438,12 @@ class OccupancyGrid {
         const idx = row * this.cols + col;
         const owner = this.owners[idx];
         if (!owner) continue;
+        const storedRadius = this.sampleRadius[idx];
+        const combinedRadius = radius + storedRadius;
+        if (combinedRadius <= 0) continue;
+        const dx = x - this.sampleX[idx];
+        const dy = y - this.sampleY[idx];
+        if ((dx * dx + dy * dy) > combinedRadius * combinedRadius) continue;
         if (owner !== playerId) return true;
         const age = this.ages[idx];
         if (frame > age && frame - age > this.ownSafeFrames) {
