@@ -3,55 +3,39 @@ import { initGame } from './src/initGame.js';
 // First-start menu (only shown once). Injects a simple overlay that lets the user add extra players,
 // shows each player's color and their control scheme, and saves the choice to localStorage.
 // This menu does not change the existing gameplay code — it only collects and persists preferences.
-(function createFirstStartMenu() {
+// Create (or re-open) the player configuration overlay. This function is safe to call multiple times.
+function openPlayerConfigMenu() {
   try {
-    const done = localStorage.getItem('firstStartDone');
-    if (done === 'true') return; // already completed
+    // If an overlay already exists, bring it to front
+    const existing = document.getElementById('firstStartMenuOverlay');
+    if (existing) {
+      existing.style.display = 'flex';
+      return;
+    }
 
     // Preset player templates (existing two players preserved)
     const presets = [
-      { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' }, // existing
-      { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' }, // existing
+      { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' },
+      { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' },
       { name: 'Player 3', color: '#66ff66', controls: 'A / D' },
       { name: 'Player 4', color: '#ffd166', controls: 'Num4 / Num6' }
     ];
 
-    // Start with two players by default
-    const players = [Object.assign({}, presets[0]), Object.assign({}, presets[1])];
+    // Start with saved configuration if available, or default to first two
+    const saved = (() => {
+      try { return JSON.parse(localStorage.getItem('playerConfig') || 'null'); } catch (e) { return null; }
+    })();
+    const players = Array.isArray(saved) && saved.length >= 2 ? saved.map(s => Object.assign({}, s)) : [Object.assign({}, presets[0]), Object.assign({}, presets[1])];
 
-    // Inject minimal CSS for the overlay
-    const style = document.createElement('style');
-    style.textContent = `
-      #firstStartMenuOverlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.75);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-        color: #fff;
-        font-family: Arial, sans-serif;
-      }
-      #firstStartMenu {
-        background: #111;
-        border: 2px solid #fff;
-        padding: 20px;
-        border-radius: 8px;
-        width: 420px;
-        max-width: calc(100% - 40px);
-      }
+    // Inject minimal CSS for the overlay if not present
+    if (!document.getElementById('firstStartMenuStyles')) {
+      const style = document.createElement('style');
+      style.id = 'firstStartMenuStyles';
+      style.textContent = `
+      #firstStartMenuOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; color: #fff; font-family: Arial, sans-serif; }
+      #firstStartMenu { background: #111; border: 2px solid #fff; padding: 20px; border-radius: 8px; width: 420px; max-width: calc(100% - 40px); }
       #firstStartMenu h2 { margin: 0 0 12px 0; }
-      .player-row {
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:8px;
-        margin:8px 0;
-        padding:8px;
-        background: rgba(255,255,255,0.03);
-        border-radius:6px;
-      }
+      .player-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0; padding:8px; background: rgba(255,255,255,0.03); border-radius:6px; }
       .player-left { display:flex; align-items:center; gap:10px; }
       .color-swatch { width:28px; height:18px; border-radius:4px; border:1px solid #000; box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset; }
       .controls-select { padding:6px; background:#222; color:#fff; border:1px solid #333; border-radius:4px; }
@@ -62,10 +46,10 @@ import { initGame } from './src/initGame.js';
       .add-btn { margin-left:4px; }
       .remove-btn { background:transparent; border: none; color:#f66; cursor:pointer; font-weight:600; }
       .muted { color: #aaa; font-size:13px; margin-top:8px; }
-    `;
-    document.head.appendChild(style);
+      `;
+      document.head.appendChild(style);
+    }
 
-    // Build overlay
     const overlay = document.createElement('div');
     overlay.id = 'firstStartMenuOverlay';
 
@@ -73,11 +57,11 @@ import { initGame } from './src/initGame.js';
     menu.id = 'firstStartMenu';
 
     const title = document.createElement('h2');
-    title.textContent = 'Welcome — Configure Players';
+    title.textContent = 'Configure Players';
 
     const description = document.createElement('div');
     description.className = 'muted';
-    description.textContent = 'This first-start menu runs only once. You can add players and see their colors and control keys. The in-game interface remains unchanged.';
+    description.textContent = 'Add or edit players and controls. Changes are persisted to localStorage and applied after reloading.';
 
     const list = document.createElement('div');
     list.id = 'playerList';
@@ -99,15 +83,7 @@ import { initGame } from './src/initGame.js';
 
         const controlsSelect = document.createElement('select');
         controlsSelect.className = 'controls-select';
-        const options = [
-          p.controls,
-          'ArrowLeft / ArrowRight',
-          'Mouse Left / Mouse Right',
-          'A / D',
-          'Num4 / Num6',
-          'J / L'
-        ];
-        // Ensure unique options and keep current
+        const options = [ p.controls, 'ArrowLeft / ArrowRight', 'Mouse Left / Mouse Right', 'A / D', 'Num4 / Num6', 'J / L' ];
         const uniq = Array.from(new Set(options));
         uniq.forEach(opt => {
           const o = document.createElement('option');
@@ -116,22 +92,16 @@ import { initGame } from './src/initGame.js';
           if (opt === p.controls) o.selected = true;
           controlsSelect.appendChild(o);
         });
-        controlsSelect.addEventListener('change', () => {
-          p.controls = controlsSelect.value;
-        });
+        controlsSelect.addEventListener('change', () => { p.controls = controlsSelect.value; });
 
         row.appendChild(left);
         row.appendChild(controlsSelect);
 
-        // Allow removal for players beyond the first two
         if (idx >= 2) {
           const removeBtn = document.createElement('button');
           removeBtn.className = 'remove-btn';
           removeBtn.textContent = 'Remove';
-          removeBtn.addEventListener('click', () => {
-            players.splice(idx, 1);
-            renderPlayers();
-          });
+          removeBtn.addEventListener('click', () => { players.splice(idx, 1); renderPlayers(); });
           row.appendChild(removeBtn);
         }
 
@@ -147,36 +117,22 @@ import { initGame } from './src/initGame.js';
     const addBtn = document.createElement('button');
     addBtn.className = 'add-btn';
     addBtn.textContent = '+ Add Player';
-    addBtn.addEventListener('click', () => {
-      if (players.length >= presets.length) return;
-      players.push(Object.assign({}, presets[players.length]));
-      renderPlayers();
-    });
+    addBtn.addEventListener('click', () => { if (players.length >= presets.length) return; players.push(Object.assign({}, presets[players.length])); renderPlayers(); });
 
     const resetBtn = document.createElement('button');
     resetBtn.className = 'ghost';
-    resetBtn.textContent = 'Reset Menu';
-    resetBtn.addEventListener('click', () => {
-      players.length = 2;
-      players[0] = Object.assign({}, presets[0]);
-      players[1] = Object.assign({}, presets[1]);
-      renderPlayers();
-    });
+    resetBtn.textContent = 'Reset';
+    resetBtn.addEventListener('click', () => { players.length = 2; players[0] = Object.assign({}, presets[0]); players[1] = Object.assign({}, presets[1]); renderPlayers(); });
 
     const startBtn = document.createElement('button');
     startBtn.className = 'primary';
-    startBtn.textContent = 'Start Game';
+    startBtn.textContent = 'Save & Reload';
     startBtn.addEventListener('click', () => {
-      // Persist chosen settings and mark first-start as done.
       try {
         localStorage.setItem('firstStartDone', 'true');
         localStorage.setItem('playerConfig', JSON.stringify(players.map(p => ({ name: p.name, color: p.color, controls: p.controls }))));
-      } catch (e) {
-        console.warn('Could not save first-start settings:', e);
-      }
-      // Remove overlay and reload so the game initializes with the chosen configuration.
-      // Reload is simple and keeps existing game initialization intact.
-      try { document.body.removeChild(overlay); } catch(e) {}
+      } catch (e) { console.warn('Could not save player settings:', e); }
+      try { document.body.removeChild(overlay); } catch (e) {}
       location.reload();
     });
 
@@ -191,10 +147,21 @@ import { initGame } from './src/initGame.js';
     overlay.appendChild(menu);
     document.body.appendChild(overlay);
   } catch (err) {
-    // Fail silently — menu is optional and must not break the game
-    console.error('First-start menu failed to initialize:', err);
+    console.error('openPlayerConfigMenu failed:', err);
   }
-})();
+}
+
+// If the user hasn't completed first-start, open it on first load
+try {
+  const done = localStorage.getItem('firstStartDone');
+  if (done !== 'true') openPlayerConfigMenu();
+} catch (e) {}
+
+// Wire up the player selection button in the main UI
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('openPlayerMenuBtn');
+  if (btn) btn.addEventListener('click', openPlayerConfigMenu);
+});
 
 const VIEW_SIZE = 10;
 const DEFAULT_ASPECT = 16 / 9;
@@ -580,7 +547,7 @@ occupancyGrid.updateBounds(
     const container = document.querySelector('.controls-info');
     if (!container) return;
     const title = container.querySelector('h2');
-    if (title) title.textContent = 'Achtung die Kurve - Players';
+    if (title) title.textContent = 'Line Evader';
     const existing = container.querySelector('.player-controls');
     if (existing) existing.remove();
 
@@ -588,11 +555,12 @@ occupancyGrid.updateBounds(
     playerControls.className = 'player-controls';
     playersList.forEach((p) => {
       const div = document.createElement('div');
-      div.className = `player${p.id}`;
+      div.className = `player${p.id} player-card`;
       div.style.background = 'rgba(255,255,255,0.03)';
       div.style.padding = '8px';
       div.style.borderRadius = '6px';
       div.style.minWidth = '160px';
+
       const h3 = document.createElement('h3');
       const sw = document.createElement('span');
       sw.style.display = 'inline-block';
@@ -679,17 +647,14 @@ let mouseState = {
 
 // Keyboard handling for all mapped players
 document.addEventListener('keydown', (event) => {
-  // Reset game with 'R' key - only if all players are dead
-  if (event.key === 'r' || event.key === 'R') {
-    const allDead = (window.gameState.players || []).every(p => !p.isAlive);
-    if (allDead) resetGame();
-    return;
-  }
+  // NOTE: reset via 'R' removed — game now pauses and exposes restart button in overlays
 
   const keyId = (event.key || '').toLowerCase();
   const codeId = (event.code || '').toLowerCase();
   const mapped = controlsMap.get(keyId) || controlsMap.get(codeId);
   if (mapped) {
+    // Prevent default browser actions (caret move, scrolling) when using mapped controls
+    try { event.preventDefault(); } catch (e) {}
     const player = window.gameState.players[mapped.playerIndex];
     if (!player || !player.isAlive) return;
     if (mapped.side === 'left') player.isTurningLeft = true;
@@ -703,6 +668,7 @@ document.addEventListener('keyup', (event) => {
   const codeId = (event.code || '').toLowerCase();
   const mapped = controlsMap.get(keyId) || controlsMap.get(codeId);
   if (mapped) {
+    try { event.preventDefault(); } catch (e) {}
     const player = window.gameState.players[mapped.playerIndex];
     if (!player) return;
     if (mapped.side === 'left') player.isTurningLeft = false;
@@ -754,6 +720,7 @@ document.addEventListener('contextmenu', (event) => {
 function updateSnake(deltaSeconds) {
   const state = window.gameState;
   if (!state || !state.players) return;
+  if (state.paused) return;
 
   state.frameCounter += 1;
   const playersArr = state.players;
@@ -761,8 +728,16 @@ function updateSnake(deltaSeconds) {
     updatePlayer(playersArr[i], deltaSeconds);
   }
 
-  if (!state.gameOverLogged && playersArr.every((p) => !p.isAlive)) {
+  // Check for end conditions: single winner or all dead (draw)
+  const alive = playersArr.filter(p => p && p.isAlive);
+  if (alive.length === 1 && !state.winnerShown) {
+    state.winnerShown = true;
+    state.paused = true;
+    showWinnerOverlay(alive[0]);
+  } else if (alive.length === 0 && !state.gameOverLogged) {
     state.gameOverLogged = true;
+    state.paused = true;
+    showDrawOverlay();
   }
 }
 
@@ -800,6 +775,120 @@ function resetGame() {
 
 // Expose reset function globally for manual reset
 window.resetGame = resetGame;
+
+// Force reset (used by overlays) - resets players regardless of current alive state
+function forceReset() {
+  const state = window.gameState;
+  if (!state || !state.players) return false;
+
+  const newStarts = state.players.map(() => generateRandomStartingPosition());
+  state.gameOverLogged = false;
+  state.winnerShown = false;
+  state.paused = false;
+
+  state.players.forEach((player, idx) => {
+    const start = newStarts[idx];
+    player.snakePosition = { x: start.x, y: start.y };
+    player.snakeDirection = start.direction;
+    player.isAlive = true;
+    player.trail = new Trail(1024, start.x, start.y);
+    player.isTurningLeft = false;
+    player.isTurningRight = false;
+  });
+
+  state.player1 = state.players[0];
+  state.player2 = state.players[1];
+  state.frameCounter = 0;
+  if (state.occupancyGrid) {
+    state.occupancyGrid.rebuildFromTrails(state.players, state.frameCounter);
+  }
+
+  return true;
+}
+
+window.forceReset = forceReset;
+
+// Create a simple winner overlay UI
+function _ensureWinnerStyles() {
+  if (document.getElementById('winnerOverlayStyles')) return;
+  const s = document.createElement('style');
+  s.id = 'winnerOverlayStyles';
+  s.textContent = `
+    #winnerOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:10000; }
+    #winnerBox { background:#111; color:#fff; padding:20px; border-radius:8px; border:1px solid #444; min-width:280px; text-align:center; }
+    #winnerBox h2 { margin:0 0 12px 0; }
+    #winnerBox p { margin:8px 0; }
+    #winnerBox button { margin-top:12px; padding:8px 12px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; cursor:pointer; }
+  `;
+  document.head.appendChild(s);
+}
+
+function showWinnerOverlay(player) {
+  try {
+    _ensureWinnerStyles();
+    const existing = document.getElementById('winnerOverlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'winnerOverlay';
+    const box = document.createElement('div');
+    box.id = 'winnerBox';
+    const title = document.createElement('h2');
+    title.textContent = 'Winner!';
+    const name = document.createElement('p');
+    name.textContent = `${player.name || ('Player ' + player.id)} wins!`;
+    const sw = document.createElement('div');
+    sw.style.width = '28px';
+    sw.style.height = '14px';
+    sw.style.margin = '8px auto';
+    sw.style.borderRadius = '4px';
+    const r = Math.round((player.color[0] || 1) * 255);
+    const g = Math.round((player.color[1] || 1) * 255);
+    const b = Math.round((player.color[2] || 1) * 255);
+    sw.style.background = `rgb(${r}, ${g}, ${b})`;
+
+    const btn = document.createElement('button');
+    btn.textContent = 'Play Again';
+    btn.addEventListener('click', () => {
+      try { document.body.removeChild(overlay); } catch (e) {}
+      forceReset();
+    });
+
+    box.appendChild(title);
+    box.appendChild(name);
+    box.appendChild(sw);
+    box.appendChild(btn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  } catch (e) {
+    console.error('showWinnerOverlay failed', e);
+  }
+}
+
+function showDrawOverlay() {
+  try {
+    _ensureWinnerStyles();
+    const existing = document.getElementById('winnerOverlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'winnerOverlay';
+    const box = document.createElement('div');
+    box.id = 'winnerBox';
+    const title = document.createElement('h2');
+    title.textContent = 'Draw';
+    const msg = document.createElement('p');
+    msg.textContent = 'All players eliminated.';
+    const btn = document.createElement('button');
+    btn.textContent = 'Play Again';
+    btn.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} forceReset(); });
+    box.appendChild(title);
+    box.appendChild(msg);
+    box.appendChild(btn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  } catch (e) {
+    console.error('showDrawOverlay failed', e);
+  }
+}
 
 function updatePlayer(player, deltaSeconds) {
   if (!player || !player.isAlive) return;
