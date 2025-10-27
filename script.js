@@ -262,18 +262,30 @@ class Trail {
     }
   }
 
-  push(x, y) {
-    let idx;
-    if (this._count < this._cap) {
-      idx = (this._start + this._count) % this._cap;
-      this._count++;
-    } else {
-      idx = this._start;
-      this._start = (this._start + 1) % this._cap;
+  _grow() {
+    const newCap = this._cap * 2;
+    const newData = new Float32Array(newCap * 2);
+    for (let i = 0; i < this._count; i++) {
+      const idx = (this._start + i) % this._cap;
+      const oldPos = idx * 2;
+      const newPos = i * 2;
+      newData[newPos] = this._data[oldPos];
+      newData[newPos + 1] = this._data[oldPos + 1];
     }
+    this._data = newData;
+    this._cap = newCap;
+    this._start = 0;
+  }
+
+  push(x, y) {
+    if (this._count >= this._cap) {
+      this._grow();
+    }
+    const idx = (this._start + this._count) % this._cap;
     const p = idx * 2;
     this._data[p] = x;
     this._data[p + 1] = y;
+    this._count++;
   }
 
   forEach(cb) {
