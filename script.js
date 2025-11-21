@@ -1,4 +1,15 @@
 import { initGame } from './src/initGame.js';
+import {
+  VIEW_SIZE,
+  DEFAULT_ASPECT,
+  TRAIL_WIDTH,
+  TRAIL_COLLISION_RADIUS,
+  TRAIL_SAFE_FRAMES,
+  FIXED_TIMESTEP_MS
+} from './src/constants.js';
+import { distanceToLineSegmentSq } from './src/math.js';
+import { Trail } from './src/trail.js';
+import { OccupancyGrid } from './src/occupancyGrid.js';
 
 // First-start menu (only shown once). Injects a simple overlay that lets the user add extra players,
 // shows each player's color and their control scheme, and saves the choice to localStorage.
@@ -188,14 +199,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btn) btn.addEventListener('click', openPlayerConfigMenu);
 });
 
-const VIEW_SIZE = 10;
-const DEFAULT_ASPECT = 16 / 9;
-const TRAIL_WIDTH = 0.05;
-const TRAIL_COLLISION_RADIUS = 0.06;
-const TRAIL_SAFE_FRAMES = 10;
-const MAX_CELL_STAMPS = 4;
-const FIXED_TIMESTEP_MS = 1000 / 60;
-
 function getCanvasAspect() {
   const canvas = document.getElementById('gameCanvas');
   if (canvas && canvas.height) {
@@ -241,259 +244,6 @@ initGame();
 // Generate random starting positions for both players
 const player1Start = generateRandomStartingPosition();
 const player2Start = generateRandomStartingPosition();
-
-// Snake game state with two players
-class Trail {
-  constructor(capacity = 1024, startX = 0, startY = 0) {
-    this._cap = Math.max(1, capacity);
-    this._data = new Float32Array(this._cap * 2);
-    this._start = 0;
-    this._count = 0;
-    if (typeof startX === 'number' && typeof startY === 'number') {
-      this.push(startX, startY);
-    }
-  }
-
-  _grow() {
-    const newCap = this._cap * 2;
-    const newData = new Float32Array(newCap * 2);
-    for (let i = 0; i < this._count; i++) {
-      const idx = (this._start + i) % this._cap;
-      const oldPos = idx * 2;
-      const newPos = i * 2;
-      newData[newPos] = this._data[oldPos];
-      newData[newPos + 1] = this._data[oldPos + 1];
-    }
-    this._data = newData;
-    this._cap = newCap;
-    this._start = 0;
-  }
-
-  push(x, y) {
-    if (this._count >= this._cap) {
-      this._grow();
-    }
-    const idx = (this._start + this._count) % this._cap;
-    const p = idx * 2;
-    this._data[p] = x;
-    this._data[p + 1] = y;
-    this._count++;
-  }
-
-  forEach(cb) {
-    for (let i = 0; i < this._count; i++) {
-      const idx = (this._start + i) % this._cap;
-      const p = idx * 2;
-      cb(this._data[p], this._data[p + 1], i);
-    }
-  }
-
-  get(i, out) {
-    if (i < 0 || i >= this._count) return undefined;
-    const idx = (this._start + i) % this._cap;
-    const p = idx * 2;
-    const target = out ?? { x: 0, y: 0 };
-    target.x = this._data[p];
-    target.y = this._data[p + 1];
-    return target;
-  }
-
-  peekLast(out) {
-    if (this._count === 0) return undefined;
-    return this.get(this._count - 1, out);
-  }
-
-  clear() {
-    this._start = 0;
-    this._count = 0;
-  }
-
-  get length() {
-    return this._count;
-  }
-}
-
-class OccupancyGrid {
-  constructor(cellSize = 0.1, ownSafeFrames = TRAIL_SAFE_FRAMES) {
-    this.cellSize = cellSize;
-    this.ownSafeFrames = ownSafeFrames;
-    this.minX = -VIEW_SIZE;
-    this.maxX = VIEW_SIZE;
-    this.minY = -VIEW_SIZE;
-    this.maxY = VIEW_SIZE;
-    this._initStorage();
-  }
-
-  _initStorage() {
-    const width = Math.max(1e-6, this.maxX - this.minX);
-    const height = Math.max(1e-6, this.maxY - this.minY);
-    this.cols = Math.max(1, Math.ceil(width / this.cellSize));
-    this.rows = Math.max(1, Math.ceil(height / this.cellSize));
-    this.invCellSize = 1 / this.cellSize;
-    const size = this.cols * this.rows;
-    const slots = size * MAX_CELL_STAMPS;
-    this.stampCount = new Uint8Array(size);
-    this.stampX = new Float32Array(slots);
-    this.stampY = new Float32Array(slots);
-    this.stampRadius = new Float32Array(slots);
-    this.stampOwner = new Uint16Array(slots);
-    this.stampAge = new Uint32Array(slots);
-  }
-
-  clear() {
-    this.stampCount.fill(0);
-    this.stampX.fill(0);
-    this.stampY.fill(0);
-    this.stampRadius.fill(0);
-    this.stampOwner.fill(0);
-    this.stampAge.fill(0);
-  }
-
-  updateBounds(minX, maxX, minY, maxY, players, frame = 0) {
-    const changed = minX !== this.minX || maxX !== this.maxX || minY !== this.minY || maxY !== this.maxY;
-    if (!changed) return;
-    this.minX = minX;
-    this.maxX = maxX;
-    this.minY = minY;
-    this.maxY = maxY;
-    this._initStorage();
-    if (players) {
-      this.rebuildFromTrails(players, frame);
-    }
-  }
-
-  rebuildFromTrails(players, frame = 0) {
-    this.clear();
-    if (!Array.isArray(players)) return;
-    for (let i = 0; i < players.length; i++) {
-      const player = players[i];
-      if (!player || !player.trail || player.trail.length < 1) continue;
-      const id = player.id ?? i + 1;
-      const trail = player.trail;
-      const tempPrev = { x: 0, y: 0 };
-      const tempCurr = { x: 0, y: 0 };
-      if (trail.length === 1) {
-        const only = trail.get(0, tempPrev);
-        this._occupyCircle(only.x, only.y, TRAIL_WIDTH, id, frame);
-        continue;
-      }
-      for (let t = 1; t < trail.length; t++) {
-        const prev = trail.get(t - 1, tempPrev);
-        const curr = trail.get(t, tempCurr);
-        if (!prev || !curr) continue;
-        this.occupySegment(prev.x, prev.y, curr.x, curr.y, id, frame);
-      }
-    }
-  }
-
-  occupySegment(x1, y1, x2, y2, playerId, frame, radius = TRAIL_WIDTH) {
-    if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const length = Math.hypot(dx, dy);
-    const step = Math.max(this.cellSize * 0.5, 1e-3);
-    const steps = Math.max(1, Math.ceil(length / step));
-    for (let i = 0; i <= steps; i++) {
-      const t = steps === 0 ? 0 : i / steps;
-      const px = x1 + dx * t;
-      const py = y1 + dy * t;
-      this._occupyCircle(px, py, radius, playerId, frame);
-    }
-  }
-
-  _occupyCircle(x, y, radius, playerId, frame) {
-    const minCol = Math.floor((x - radius - this.minX) * this.invCellSize);
-    const maxCol = Math.floor((x + radius - this.minX) * this.invCellSize);
-    const minRow = Math.floor((y - radius - this.minY) * this.invCellSize);
-    const maxRow = Math.floor((y + radius - this.minY) * this.invCellSize);
-    for (let row = minRow; row <= maxRow; row++) {
-      if (row < 0 || row >= this.rows) continue;
-      for (let col = minCol; col <= maxCol; col++) {
-        if (col < 0 || col >= this.cols) continue;
-        if (!this._circleIntersectsCell(x, y, radius, col, row)) continue;
-        const idx = row * this.cols + col;
-        this._writeStamp(idx, x, y, radius, playerId, frame);
-      }
-    }
-  }
-
-  _writeStamp(idx, x, y, radius, playerId, frame) {
-    const base = idx * MAX_CELL_STAMPS;
-    let count = this.stampCount[idx];
-    let slot;
-    if (count < MAX_CELL_STAMPS) {
-      slot = base + count;
-      this.stampCount[idx] = count + 1;
-    } else {
-      slot = base;
-      let oldestAge = this.stampAge[slot];
-      for (let i = 1; i < MAX_CELL_STAMPS; i++) {
-        const candidate = base + i;
-        const candidateAge = this.stampAge[candidate];
-        if (candidateAge < oldestAge) {
-          slot = candidate;
-          oldestAge = candidateAge;
-        }
-      }
-    }
-
-    this.stampX[slot] = x;
-    this.stampY[slot] = y;
-    this.stampRadius[slot] = radius;
-    this.stampOwner[slot] = playerId;
-    this.stampAge[slot] = frame;
-  }
-
-  _circleIntersectsCell(cx, cy, radius, col, row) {
-    const cellMinX = this.minX + col * this.cellSize;
-    const cellMinY = this.minY + row * this.cellSize;
-    const cellMaxX = cellMinX + this.cellSize;
-    const cellMaxY = cellMinY + this.cellSize;
-    const closestX = Math.max(cellMinX, Math.min(cx, cellMaxX));
-    const closestY = Math.max(cellMinY, Math.min(cy, cellMaxY));
-    const dx = cx - closestX;
-    const dy = cy - closestY;
-    return (dx * dx + dy * dy) <= radius * radius;
-  }
-
-  checkCollision(x, y, radius, playerId, frame) {
-    const minCol = Math.floor((x - radius - this.minX) * this.invCellSize);
-    const maxCol = Math.floor((x + radius - this.minX) * this.invCellSize);
-    const minRow = Math.floor((y - radius - this.minY) * this.invCellSize);
-    const maxRow = Math.floor((y + radius - this.minY) * this.invCellSize);
-    for (let row = minRow; row <= maxRow; row++) {
-      if (row < 0 || row >= this.rows) continue;
-      for (let col = minCol; col <= maxCol; col++) {
-        if (col < 0 || col >= this.cols) continue;
-        if (!this._circleIntersectsCell(x, y, radius, col, row)) continue;
-        const idx = row * this.cols + col;
-        const count = this.stampCount[idx];
-        if (!count) continue;
-        const base = idx * MAX_CELL_STAMPS;
-        for (let i = 0; i < count; i++) {
-          const slot = base + i;
-          const owner = this.stampOwner[slot];
-          if (!owner) continue;
-          const storedRadius = this.stampRadius[slot];
-          const combinedRadius = radius + storedRadius;
-          if (combinedRadius <= 0) continue;
-          const dx = x - this.stampX[slot];
-          const dy = y - this.stampY[slot];
-          if ((dx * dx + dy * dy) > combinedRadius * combinedRadius) continue;
-          if (owner !== playerId) return true;
-          const age = this.stampAge[slot];
-          if (frame > age && frame - age > this.ownSafeFrames) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
-}
-
-
-
 
 /*
   Build runtime game state from saved first-start playerConfig.
@@ -1036,37 +786,6 @@ function checkTrailSegmentCollision(x, y, trail, radius, isOwnTrail, skipPoints)
     if (distSq < radiusSq) return true;
   }
   return false;
-}
-
-// Calculate distance from point to line segment
-function distanceToLineSegment(px, py, x1, y1, x2, y2) {
-  // Keep the old function name but implement using squared distance helper
-  return Math.sqrt(distanceToLineSegmentSq(px, py, x1, y1, x2, y2));
-}
-
-// Squared-distance variant (avoids Math.sqrt)
-function distanceToLineSegmentSq(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-
-  if (lenSq === 0) {
-    // segment is a point
-    const vx = px - x1;
-    const vy = py - y1;
-    return vx * vx + vy * vy;
-  }
-
-  // Project point onto line (parameter t)
-  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
-  if (t < 0) t = 0;
-  else if (t > 1) t = 1;
-
-  const closestX = x1 + t * dx;
-  const closestY = y1 + t * dy;
-  const rx = px - closestX;
-  const ry = py - closestY;
-  return rx * rx + ry * ry;
 }
 
 // Start the fixed-timestep game loop
