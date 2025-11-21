@@ -13,10 +13,6 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
 
 // Config copied from firebase shizl.md
-const dbUrl =
-  (typeof window !== 'undefined' && (window.FIREBASE_DB_URL || window.firebaseDbUrl)) ||
-  'https://line-evader-default-rtdb.europe-west1.firebasedatabase.app/';
-
 const firebaseConfig = {
   apiKey: 'AIzaSyB7f9RcMozPvmEQ3jTwEFGGmiZvJu5Dnk4',
   authDomain: 'line-evader.firebaseapp.com',
@@ -24,8 +20,7 @@ const firebaseConfig = {
   storageBucket: 'line-evader.firebasestorage.app',
   messagingSenderId: '899235546740',
   appId: '1:899235546740:web:4fb98f8de564958b263321',
-  // Prefer firebasedatabase.app; allow override via window.FIREBASE_DB_URL if needed.
-  databaseURL: dbUrl
+  databaseURL: 'https://line-evader-default-rtdb.europe-west1.firebasedatabase.app'
 };
 
 let appInstance = null;
