@@ -66,6 +66,14 @@ function updateMpStatus(text) {
   if (el) el.textContent = text;
 }
 
+function updateRoomInfo(roomId, role) {
+  const el = document.getElementById('mpRoomInfo');
+  const display = document.getElementById('roomDisplay');
+  const text = roomId ? `Room: ${roomId}${role ? ` (${role})` : ''}` : 'Room: --';
+  if (el) el.textContent = text;
+  if (display) display.textContent = text;
+}
+
 function updateLatency(ms) {
   const el = document.getElementById('mpLatency');
   if (!el) return;
@@ -109,8 +117,13 @@ function cssFromColor(arrOrHex) {
 function renderRoster(players) {
   const el = document.getElementById('roster');
   if (!el) return;
+  const isLocal = mpMode === 'local' || mpMode === null;
   const cards = (players || [])
-    .filter((p, idx) => p && (idx === 0 || p.clientId))
+    .filter((p, idx) => {
+      if (!p) return false;
+      if (idx === 0) return true;
+      return isLocal ? true : Boolean(p.clientId);
+    })
     .map((p) => {
     const color = cssFromColor(p.color);
     const name = p.name || `Player ${p.id}`;
@@ -134,6 +147,14 @@ function applyLocalPrefs() {
 
 function assignRemotePlayers(remotePlayers) {
   if (!window.gameState) return;
+  // reset non-local slots for fresh assignment in multiplayer
+  if (mpMode === 'host' || mpMode === 'guest') {
+    for (let i = 1; i < window.gameState.players.length; i++) {
+      const p = window.gameState.players[i];
+      if (!p) continue;
+      p.clientId = null;
+    }
+  }
   const list = Object.values(remotePlayers || {}).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
   let slot = 1;
   list.forEach((rp) => {
@@ -172,15 +193,29 @@ function initModeOverlay() {
       mpMode = 'local';
       pendingPrefs = capturePrefs();
       applyLocalPrefs();
+      if (selectLocal) selectLocal.style.display = 'none';
+      if (selectMp) selectMp.style.display = 'none';
+      const question = overlay?.querySelector('h3');
+      const subtitle = overlay?.querySelector('p');
+      if (question) question.style.display = 'none';
+      if (subtitle) subtitle.style.display = 'none';
       if (mpConfig) mpConfig.style.display = 'none';
       if (overlay) overlay.style.display = 'none';
       updateMpStatus('Local mode');
+      updateRoomInfo(null);
     });
   }
 
   if (selectMp) {
     selectMp.addEventListener('click', () => {
+      if (selectLocal) selectLocal.style.display = 'none';
+      if (selectMp) selectMp.style.display = 'none';
+      const question = overlay?.querySelector('h3');
+      const subtitle = overlay?.querySelector('p');
+      if (question) question.style.display = 'none';
+      if (subtitle) subtitle.style.display = 'none';
       if (mpConfig) mpConfig.style.display = 'block';
+      updateMpStatus('Multiplayer selected - set prefs');
     });
   }
 
@@ -203,6 +238,7 @@ async function startHost(roomId) {
     updateMpStatus('Connecting as host...');
     await roomClient.joinRoom();
     updateMpStatus(`Hosting ${roomId}`);
+    updateRoomInfo(roomId, 'host');
   } catch (e) {
     updateMpError(`Host join failed: ${e?.message || e}`);
     return;
@@ -260,6 +296,7 @@ async function startGuest(roomId) {
     updateMpStatus('Joining room...');
     await roomClient.joinRoom();
     updateMpStatus(`Joined ${roomId}`);
+    updateRoomInfo(roomId, 'guest');
   } catch (e) {
     updateMpError(`Join failed: ${e?.message || e}`);
     return;

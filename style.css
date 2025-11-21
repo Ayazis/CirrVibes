@@ -226,3 +226,9 @@ canvas {
   border-radius: 3px;
   display: inline-block;
 }
+
+.room-display {
+  margin-top: 4px;
+  color: #ccc;
+  font-size: 13px;
+}
