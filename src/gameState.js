@@ -32,6 +32,7 @@ export function createInitialGameState() {
     return {
       id: idx + 1,
       clientId: null,
+      active: true,
       name: cfg.name || `Player ${idx + 1}`,
       snakePosition: { x: start.x, y: start.y },
       snakeDirection: start.direction,

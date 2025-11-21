@@ -1,12 +1,24 @@
 import { initGame } from './src/initGame.js';
 import { loadFirstStartDone } from './src/persistence.js';
 import { openPlayerConfigMenu, showWinnerOverlay, showDrawOverlay } from './src/ui/overlays.js';
-import { updateControlsInfoUI } from './src/ui/controlsInfo.js';
+import { updateControlsInfoUI as renderControlsInfo } from './src/ui/controlsInfo.js';
 import { attachInputHandlers } from './src/input.js';
 import { createInitialGameState } from './src/gameState.js';
 import { startFixedStepLoop, resetGame, forceReset } from './src/gameLoop.js';
 import { initFirebase } from './src/firebaseClient.js';
 import { RoomClient, createRoomId } from './src/roomClient.js';
+import { generateRandomStartingPosition } from './src/viewUtils.js';
+import { Trail } from './src/trail.js';
+
+// Multiplayer POC globals/state
+let mpMode = null; // 'host' | 'guest' | 'local' | null
+let roomClient = null;
+let inputSeq = 0;
+let loopStarted = false;
+let loopController = null;
+let pendingPrefs = null;
+let capturePrefs = null;
+let detachInput = null;
 
 // Open the player config on initial page load only when the user hasn't completed first-start.
 // This avoids reopening the overlay after Save & Reload.
@@ -34,26 +46,29 @@ initGame();
 
 window.gameState = createInitialGameState();
 
-updateControlsInfoUI(window.gameState.players);
-window.updateControlsInfoUI = updateControlsInfoUI;
+updateControls(window.gameState.players);
+window.updateControlsInfoUI = updateControls;
 renderRoster(window.gameState.players);
-renderRoster(window.gameState.players);
+deactivateInactiveSlots();
 
 // Attach input handlers for current state (local play)
-let detachInput = attachInputHandlers(window.gameState);
+detachInput = attachInputHandlers(window.gameState);
 
 // Expose reset helpers
-window.resetGame = () => resetGame(window.gameState);
-window.forceReset = () => forceReset(window.gameState);
-
-// Multiplayer POC globals/state
-let mpMode = null; // 'host' | 'guest' | 'local' | null
-let roomClient = null;
-let inputSeq = 0;
-let loopStarted = false;
-let loopController = null;
-let pendingPrefs = null;
-let capturePrefs = null;
+window.resetGame = () => {
+  const res = resetGame(window.gameState);
+  deactivateInactiveSlots();
+  updateControls(window.gameState.players);
+  renderRoster(window.gameState.players);
+  return res;
+};
+window.forceReset = () => {
+  const res = forceReset(window.gameState);
+  deactivateInactiveSlots();
+  updateControls(window.gameState.players);
+  renderRoster(window.gameState.players);
+  return res;
+};
 
 function startLoopWithCallbacks(callbacks) {
   if (loopStarted) return;
@@ -114,17 +129,117 @@ function cssFromColor(arrOrHex) {
   return '#cccccc';
 }
 
+function visiblePlayers(players) {
+  const list = [];
+  const local = players?.[0];
+  if (local) list.push(local);
+  const hasRoom = Boolean(roomClient);
+  if (!hasRoom && mpMode === 'local') {
+    (players || []).slice(1).forEach((p) => { if (p) list.push(p); });
+  } else if (hasRoom || mpMode === 'host' || mpMode === 'guest') {
+    (players || []).slice(1).forEach((p) => { if (p && p.clientId) list.push(p); });
+  }
+  return list;
+}
+
+function createPlayerFromConfig(cfg, idx) {
+  const start = generateRandomStartingPosition();
+  return {
+    id: idx + 1,
+    clientId: cfg?.clientId || null,
+    active: true,
+    name: cfg?.name || `Player ${idx + 1}`,
+    snakePosition: { x: start.x, y: start.y },
+    snakeDirection: start.direction,
+    snakeSpeed: 1.2,
+    turnSpeed: 180,
+    isAlive: true,
+    trail: new Trail(1024, start.x, start.y),
+    isTurningLeft: false,
+    isTurningRight: false,
+    color: rgbaFromHex(cfg?.color || '#66ccff'),
+    controls: cfg?.controls || 'ArrowLeft / ArrowRight',
+    score: cfg?.score || 0,
+    _deathProcessed: false
+  };
+}
+
+function ensurePlayerSlot(idx, cfg) {
+  if (!window.gameState) return null;
+  if (!window.gameState.players) window.gameState.players = [];
+  while (window.gameState.players.length <= idx) {
+    window.gameState.players.push(null);
+  }
+  if (!window.gameState.players[idx]) {
+    window.gameState.players[idx] = createPlayerFromConfig(cfg, idx);
+  } else if (cfg) {
+    const p = window.gameState.players[idx];
+    p.name = cfg.name || p.name;
+    p.controls = cfg.controls || p.controls;
+    p.color = cfg.color ? rgbaFromHex(cfg.color) : p.color;
+    p.clientId = cfg.clientId || p.clientId;
+    p.active = true;
+  }
+  return window.gameState.players[idx];
+}
+
+function rebuildOccupancy() {
+  if (window.gameState?.occupancyGrid) {
+    window.gameState.occupancyGrid.rebuildFromTrails(window.gameState.players.filter(Boolean), window.gameState.frameCounter || 0);
+  }
+}
+
+function pruneToLocalOnly() {
+  if (!window.gameState) return;
+  if (!window.gameState.players || !window.gameState.players[0]) return;
+  window.gameState.players = [window.gameState.players[0]];
+  window.gameState.player1 = window.gameState.players[0];
+  window.gameState.player2 = window.gameState.players[1];
+  window.gameState.players[0].active = true;
+  rebuildOccupancy();
+  deactivateInactiveSlots();
+  updateControls(window.gameState.players);
+  renderRoster(window.gameState.players);
+}
+
+function deactivateInactiveSlots() {
+  const players = window.gameState?.players || [];
+  const isNet = mpMode === 'host' || mpMode === 'guest';
+  players.forEach((p, idx) => {
+    if (!p) return;
+    if (idx === 0) {
+      p.active = true;
+      if (!p.isAlive) {
+        p.isAlive = true;
+        p._deathProcessed = false;
+      }
+      return;
+    }
+    if (isNet && !p.clientId) {
+      p.active = false;
+      p.isAlive = false;
+      p._deathProcessed = true;
+      p.isTurningLeft = false;
+      p.isTurningRight = false;
+    } else if (isNet && p.clientId) {
+      p.active = true;
+      p.isAlive = true;
+      p._deathProcessed = false;
+    } else if (!isNet) {
+      p.active = true;
+    }
+  });
+}
+
+function updateControls(players) {
+  renderControlsInfo(visiblePlayers(players));
+}
+
 function renderRoster(players) {
   const el = document.getElementById('roster');
   if (!el) return;
-  const isLocal = mpMode === 'local' || mpMode === null;
-  const cards = (players || [])
-    .filter((p, idx) => {
-      if (!p) return false;
-      if (idx === 0) return true;
-      return isLocal ? true : Boolean(p.clientId);
-    })
-    .map((p) => {
+  const list = visiblePlayers(players);
+  const cards = list.map((p) => {
     const color = cssFromColor(p.color);
     const name = p.name || `Player ${p.id}`;
     const controls = p.controls || '';
@@ -139,7 +254,7 @@ function applyLocalPrefs() {
   p.name = pendingPrefs.name || p.name;
   p.controls = pendingPrefs.controls || p.controls;
   p.color = rgbaFromHex(pendingPrefs.color || '#66ccff');
-  updateControlsInfoUI(window.gameState.players);
+  updateControls(window.gameState.players);
   renderRoster(window.gameState.players);
   if (detachInput) try { detachInput(); } catch (e) {}
   detachInput = attachInputHandlers(window.gameState);
@@ -147,27 +262,21 @@ function applyLocalPrefs() {
 
 function assignRemotePlayers(remotePlayers) {
   if (!window.gameState) return;
-  // reset non-local slots for fresh assignment in multiplayer
+  // rebuild non-local slots for fresh assignment in multiplayer
   if (mpMode === 'host' || mpMode === 'guest') {
-    for (let i = 1; i < window.gameState.players.length; i++) {
-      const p = window.gameState.players[i];
-      if (!p) continue;
-      p.clientId = null;
-    }
+    window.gameState.players = window.gameState.players.slice(0, 1); // keep local only
   }
   const list = Object.values(remotePlayers || {}).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
   let slot = 1;
   list.forEach((rp) => {
     if (rp.id === roomClient?.playerId) return;
-    if (slot >= window.gameState.players.length) return;
-    const target = window.gameState.players[slot];
-    target.clientId = rp.id || rp.playerId;
-    target.name = rp.name || target.name;
-    target.controls = rp.controls || target.controls;
-    target.color = rp.color ? rgbaFromHex(rp.color) : target.color;
+    if (slot >= 4) return;
+    const cfg = { name: rp.name, color: rp.color, controls: rp.controls, clientId: rp.id || rp.playerId };
+    ensurePlayerSlot(slot, cfg);
     slot += 1;
   });
-  updateControlsInfoUI(window.gameState.players);
+  rebuildOccupancy();
+  updateControls(window.gameState.players);
   renderRoster(window.gameState.players);
   updateMpStatus(`Players: ${Math.min(slot, window.gameState.players.length)} / ${window.gameState.players.length}`);
 }
@@ -193,12 +302,6 @@ function initModeOverlay() {
       mpMode = 'local';
       pendingPrefs = capturePrefs();
       applyLocalPrefs();
-      if (selectLocal) selectLocal.style.display = 'none';
-      if (selectMp) selectMp.style.display = 'none';
-      const question = overlay?.querySelector('h3');
-      const subtitle = overlay?.querySelector('p');
-      if (question) question.style.display = 'none';
-      if (subtitle) subtitle.style.display = 'none';
       if (mpConfig) mpConfig.style.display = 'none';
       if (overlay) overlay.style.display = 'none';
       updateMpStatus('Local mode');
@@ -208,13 +311,14 @@ function initModeOverlay() {
 
   if (selectMp) {
     selectMp.addEventListener('click', () => {
+      pruneToLocalOnly();
+      if (mpConfig) mpConfig.style.display = 'block';
       if (selectLocal) selectLocal.style.display = 'none';
       if (selectMp) selectMp.style.display = 'none';
       const question = overlay?.querySelector('h3');
       const subtitle = overlay?.querySelector('p');
       if (question) question.style.display = 'none';
       if (subtitle) subtitle.style.display = 'none';
-      if (mpConfig) mpConfig.style.display = 'block';
       updateMpStatus('Multiplayer selected - set prefs');
     });
   }
@@ -223,6 +327,9 @@ function initModeOverlay() {
     readyBtn.addEventListener('click', () => {
       pendingPrefs = capturePrefs();
       applyLocalPrefs();
+      deactivateInactiveSlots();
+      updateControls(window.gameState.players);
+      renderRoster(window.gameState.players);
       if (overlay) overlay.style.display = 'none';
       updateMpStatus('Ready - create or join a room');
     });
@@ -231,6 +338,7 @@ function initModeOverlay() {
 
 async function startHost(roomId) {
   mpMode = 'host';
+  pruneToLocalOnly();
   applyLocalPrefs();
   const info = pendingPrefs || getPlayerInfo();
   roomClient = new RoomClient({ roomId, playerInfo: info, isHost: true });
@@ -246,6 +354,9 @@ async function startHost(roomId) {
   if (window.gameState?.players?.[0]) {
     window.gameState.players[0].clientId = roomClient.playerId;
   }
+  deactivateInactiveSlots();
+  updateControls(window.gameState.players);
+  renderRoster(window.gameState.players);
 
   roomClient.listenPlayers((players) => {
     assignRemotePlayers(players);
@@ -289,6 +400,7 @@ async function startHost(roomId) {
 
 async function startGuest(roomId) {
   mpMode = 'guest';
+  pruneToLocalOnly();
   applyLocalPrefs();
   const info = pendingPrefs || getPlayerInfo();
   roomClient = new RoomClient({ roomId, playerInfo: info, isHost: false });
@@ -305,6 +417,9 @@ async function startGuest(roomId) {
     window.gameState.players[0].clientId = roomClient.playerId;
   }
   if (window.gameState) window.gameState.paused = true;
+  deactivateInactiveSlots();
+  updateControls(window.gameState.players);
+  renderRoster(window.gameState.players);
 
   roomClient.listenPlayers((players) => {
     assignRemotePlayers(players);
@@ -312,6 +427,11 @@ async function startGuest(roomId) {
 
   roomClient.listenState((state) => {
     const players = window.gameState?.players || [];
+    // Ensure slots exist for incoming state
+    const incoming = state.players || [];
+    incoming.forEach((p, idx) => {
+      ensurePlayerSlot(idx, { name: p.name, color: p.color, controls: p.controls });
+    });
     (state.players || []).forEach((p, idx) => {
       if (!players[idx]) return;
       players[idx].snakePosition.x = p.x;
@@ -320,7 +440,7 @@ async function startGuest(roomId) {
       players[idx].isAlive = p.isAlive;
       players[idx].score = p.score;
     });
-    try { updateControlsInfoUI(window.gameState.players); } catch (e) {}
+    try { updateControls(window.gameState.players); } catch (e) {}
     if (state.lastUpdate) {
       const lag = Date.now() - state.lastUpdate;
       updateLatency(lag);

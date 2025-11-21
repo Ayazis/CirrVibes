@@ -4,7 +4,7 @@ import { checkTrailCollision } from './collision.js';
 import { Trail } from './trail.js';
 
 function updatePlayer(player, deltaSeconds, state) {
-  if (!player || !player.isAlive) return;
+  if (!player || player.active === false || !player.isAlive) return;
 
   const turnAmount = player.turnSpeed * deltaSeconds;
   if (player.isTurningLeft) {
@@ -91,13 +91,14 @@ export function updateSnake(deltaSeconds, state, { onWinner, onDraw } = {}) {
 
 export function resetGame(state) {
   if (!state || !state.players) return false;
-  if (!state.players.every((p) => !p.isAlive)) {
+  if (!state.players.every((p) => !p.isAlive || p.active === false)) {
     return false;
   }
   const newStarts = state.players.map(() => generateRandomStartingPosition());
   state.gameOverLogged = false;
 
   state.players.forEach((player, idx) => {
+    if (player && player.active === false) return;
     const start = newStarts[idx];
     player.snakePosition = { x: start.x, y: start.y };
     player.snakeDirection = start.direction;
@@ -127,6 +128,7 @@ export function forceReset(state) {
   state.paused = false;
 
   state.players.forEach((player, idx) => {
+    if (player && player.active === false) return;
     const start = newStarts[idx];
     player.snakePosition = { x: start.x, y: start.y };
     player.snakeDirection = start.direction;
