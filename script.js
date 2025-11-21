@@ -10,187 +10,16 @@ import {
 import { Trail } from './src/trail.js';
 import { OccupancyGrid } from './src/occupancyGrid.js';
 import { getCanvasAspect, computeViewBounds, generateRandomStartingPosition } from './src/viewUtils.js';
-import { loadPlayerConfig } from './src/persistence.js';
-import { checkTrailCollision, checkTrailSegmentCollision } from './src/collision.js';
+import { loadPlayerConfig, loadFirstStartDone } from './src/persistence.js';
+import { checkTrailCollision } from './src/collision.js';
+import { openPlayerConfigMenu, showWinnerOverlay, showDrawOverlay } from './src/ui/overlays.js';
+import { updateControlsInfoUI } from './src/ui/controlsInfo.js';
 
-// First-start menu (only shown once). Injects a simple overlay that lets the user add extra players,
-// shows each player's color and their control scheme, and saves the choice to localStorage.
-// This menu does not change the existing gameplay code — it only collects and persists preferences.
-// Create (or re-open) the player configuration overlay. This function is safe to call multiple times.
-function openPlayerConfigMenu() {
-  try {
-    // If an overlay already exists, bring it to front
-    const existing = document.getElementById('firstStartMenuOverlay');
-    if (existing) {
-      existing.style.display = 'flex';
-      try { window.playerConfigMenuOpen = true; if (window.gameState) window.gameState.paused = true; } catch (e) {}
-      return;
-    }
-
-    // Preset player templates (existing two players preserved)
-    const presets = [
-      { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' },
-      { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' },
-      { name: 'Player 3', color: '#66ff66', controls: 'A / D' },
-      { name: 'Player 4', color: '#ffd166', controls: 'Num4 / Num6' }
-    ];
-
-    // Start with saved configuration if available, or default to first two
-    const saved = (() => {
-      try { return JSON.parse(localStorage.getItem('playerConfig') || 'null'); } catch (e) { return null; }
-    })();
-    const players = Array.isArray(saved) && saved.length >= 2 ? saved.map(s => Object.assign({}, s)) : [Object.assign({}, presets[0]), Object.assign({}, presets[1])];
-
-    // Inject minimal CSS for the overlay if not present
-    if (!document.getElementById('firstStartMenuStyles')) {
-      const style = document.createElement('style');
-      style.id = 'firstStartMenuStyles';
-      style.textContent = `
-      #firstStartMenuOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; color: #fff; font-family: Arial, sans-serif; }
-      #firstStartMenu { background: #111; border: 2px solid #fff; padding: 20px; border-radius: 8px; width: 420px; max-width: calc(100% - 40px); }
-      #firstStartMenu h2 { margin: 0 0 12px 0; }
-      .player-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0; padding:8px; background: rgba(255,255,255,0.03); border-radius:6px; }
-      .player-left { display:flex; align-items:center; gap:10px; }
-      .color-swatch { width:28px; height:18px; border-radius:4px; border:1px solid #000; box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset; }
-      .controls-select { padding:6px; background:#222; color:#fff; border:1px solid #333; border-radius:4px; }
-      .menu-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
-      button { padding:8px 12px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; cursor:pointer; }
-      button.primary { background: #0b7; border-color: #087; color:#002; font-weight:700; }
-      button.ghost { background:transparent; border-color:#555; }
-      .add-btn { margin-left:4px; }
-      .remove-btn { background:transparent; border: none; color:#f66; cursor:pointer; font-weight:600; }
-      .muted { color: #aaa; font-size:13px; margin-top:8px; }
-      `;
-      document.head.appendChild(style);
-    }
-
-    const overlay = document.createElement('div');
-    overlay.id = 'firstStartMenuOverlay';
-
-    const menu = document.createElement('div');
-    menu.id = 'firstStartMenu';
-
-    const title = document.createElement('h2');
-    title.textContent = 'Configure Players';
-
-    const description = document.createElement('div');
-    description.className = 'muted';
-    description.textContent = 'Add or edit players and controls. Changes are persisted to localStorage and applied after reloading.';
-
-    const list = document.createElement('div');
-    list.id = 'playerList';
-
-    function renderPlayers() {
-      list.innerHTML = '';
-      players.forEach((p, idx) => {
-        const row = document.createElement('div');
-        row.className = 'player-row';
-        const left = document.createElement('div');
-        left.className = 'player-left';
-        const sw = document.createElement('div');
-        sw.className = 'color-swatch';
-        sw.style.background = p.color;
-        const label = document.createElement('div');
-        label.textContent = `${p.name}`;
-        left.appendChild(sw);
-        left.appendChild(label);
-
-        const controlsSelect = document.createElement('select');
-        controlsSelect.className = 'controls-select';
-        const options = [ p.controls, 'ArrowLeft / ArrowRight', 'Mouse Left / Mouse Right', 'A / D', 'Num4 / Num6', 'J / L' ];
-        const uniq = Array.from(new Set(options));
-        uniq.forEach(opt => {
-          const o = document.createElement('option');
-          o.value = opt;
-          o.textContent = opt;
-          if (opt === p.controls) o.selected = true;
-          controlsSelect.appendChild(o);
-        });
-        controlsSelect.addEventListener('change', () => { p.controls = controlsSelect.value; });
-
-        row.appendChild(left);
-        row.appendChild(controlsSelect);
-
-        if (idx >= 2) {
-          const removeBtn = document.createElement('button');
-          removeBtn.className = 'remove-btn';
-          removeBtn.textContent = 'Remove';
-          removeBtn.addEventListener('click', () => { players.splice(idx, 1); renderPlayers(); });
-          row.appendChild(removeBtn);
-        }
-
-        list.appendChild(row);
-      });
-    }
-
-    renderPlayers();
-
-    const actions = document.createElement('div');
-    actions.className = 'menu-actions';
-
-    const addBtn = document.createElement('button');
-    addBtn.className = 'add-btn';
-    addBtn.textContent = '+ Add Player';
-    addBtn.addEventListener('click', () => { if (players.length >= presets.length) return; players.push(Object.assign({}, presets[players.length])); renderPlayers(); });
-
-    const resetBtn = document.createElement('button');
-    resetBtn.className = 'ghost';
-    resetBtn.textContent = 'Reset';
-    resetBtn.addEventListener('click', () => { players.length = 2; players[0] = Object.assign({}, presets[0]); players[1] = Object.assign({}, presets[1]); renderPlayers(); });
-
-    const startBtn = document.createElement('button');
-    startBtn.className = 'primary';
-    startBtn.textContent = 'Save & Reload';
-    startBtn.addEventListener('click', () => {
-      try {
-        localStorage.setItem('firstStartDone', 'true');
-        localStorage.setItem('playerConfig', JSON.stringify(players.map(p => ({ name: p.name, color: p.color, controls: p.controls }))));
-      } catch (e) { console.warn('Could not save player settings:', e); }
-      // Ensure we clear the open flag and unpause the game if it's initialized.
-      try { window.playerConfigMenuOpen = false; if (window.gameState) window.gameState.paused = false; } catch (e) {}
-      // Remove any overlay element by id (robust against scope / re-creations)
-      try {
-        const el = document.getElementById('firstStartMenuOverlay');
-        if (el && el.parentNode) el.parentNode.removeChild(el);
-      } catch (e) {}
-      // Reload to apply saved settings (keep for legacy behavior)
-      try { location.reload(); } catch (e) {}
-    });
-
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'ghost';
-    closeBtn.textContent = 'Close';
-    closeBtn.addEventListener('click', () => {
-      try { window.playerConfigMenuOpen = false; if (window.gameState) window.gameState.paused = false; } catch (e) {}
-      // Remove overlay by id to avoid closure-scope issues
-      try {
-        const el = document.getElementById('firstStartMenuOverlay');
-        if (el && el.parentNode) el.parentNode.removeChild(el);
-      } catch (e) {}
-    });
-
-    actions.appendChild(addBtn);
-    actions.appendChild(resetBtn);
-    actions.appendChild(closeBtn);
-    actions.appendChild(startBtn);
-
-    menu.appendChild(title);
-    menu.appendChild(description);
-    menu.appendChild(list);
-    menu.appendChild(actions);
-    try { window.playerConfigMenuOpen = true; if (window.gameState) window.gameState.paused = true; } catch (e) {}
-    overlay.appendChild(menu);
-    document.body.appendChild(overlay);
-  } catch (err) {
-    console.error('openPlayerConfigMenu failed:', err);
-  }
-}
-
- // Open the player config on initial page load only when the user hasn't completed first-start.
- // This avoids reopening the overlay after Save & Reload.
+// Open the player config on initial page load only when the user hasn't completed first-start.
+// This avoids reopening the overlay after Save & Reload.
 document.addEventListener('DOMContentLoaded', () => {
   try {
-    const done = localStorage.getItem('firstStartDone');
+    const done = loadFirstStartDone();
     if (done !== 'true') openPlayerConfigMenu();
   } catch (e) {}
 });
@@ -280,80 +109,15 @@ function awardPointsForDeath(deadPlayer) {
     if (!deadPlayer || !deadPlayer.id) return;
     const state = window.gameState;
     if (!state || !Array.isArray(state.players)) return;
-    // Avoid awarding multiple times for the same death instance
     if (deadPlayer._deathProcessed) return;
     deadPlayer._deathProcessed = true;
-    // Award only to other players that are currently alive (dead snakes must not gain points)
     state.players.forEach((p) => {
       if (!p) return;
       if (p.id !== deadPlayer.id && p.isAlive) {
         p.score = (Number(p.score) || 0) + 1;
       }
     });
-    // Refresh controls UI
     try { if (typeof window.updateControlsInfoUI === 'function') window.updateControlsInfoUI(state.players); } catch (e) {}
-  } catch (e) {
-    // silent
-  }
-}
-
-// Update the on-screen controls-info panel to reflect configured players
-function updateControlsInfoUI(playersList) {
-  try {
-    const container = document.querySelector('.controls-info');
-    if (!container) return;
-    const title = container.querySelector('h2');
-    if (title) title.textContent = 'Line Evader';
-    const existing = container.querySelector('.player-controls');
-    if (existing) existing.remove();
-
-    const playerControls = document.createElement('div');
-    playerControls.className = 'player-controls';
-    playersList.forEach((p) => {
-      const div = document.createElement('div');
-      div.className = `player${p.id} player-card`;
-      div.style.background = 'rgba(255,255,255,0.03)';
-      div.style.padding = '8px';
-      div.style.borderRadius = '6px';
-      div.style.minWidth = '160px';
-
-      const h3 = document.createElement('h3');
-      const sw = document.createElement('span');
-      sw.style.display = 'inline-block';
-      sw.style.width = '12px';
-      sw.style.height = '12px';
-      sw.style.marginRight = '8px';
-      sw.style.verticalAlign = 'middle';
-      const r = Math.round(p.color[0] * 255);
-      const g = Math.round(p.color[1] * 255);
-      const b = Math.round(p.color[2] * 255);
-      sw.style.background = `rgb(${r}, ${g}, ${b})`;
-      h3.appendChild(sw);
-      const nameNode = document.createTextNode(`${p.name}`);
-      h3.appendChild(nameNode);
-
-      // score display
-      const scoreSpan = document.createElement('span');
-      scoreSpan.className = 'player-score';
-      scoreSpan.style.marginLeft = '8px';
-      scoreSpan.style.fontWeight = '700';
-      scoreSpan.style.color = '#fff';
-      scoreSpan.textContent = `${(p.score != null) ? p.score : 0}`;
-      h3.appendChild(scoreSpan);
-
-      const p1 = document.createElement('p');
-      p1.textContent = `Controls: ${p.controls}`;
-      p1.style.margin = '6px 0 0 0';
-      p1.style.fontSize = '14px';
-
-      div.appendChild(h3);
-      div.appendChild(p1);
-      playerControls.appendChild(div);
-    });
-
-    const gameInfo = container.querySelector('.game-info');
-    if (gameInfo) container.insertBefore(playerControls, gameInfo);
-    else container.appendChild(playerControls);
   } catch (e) {
     // silent
   }
@@ -500,11 +264,11 @@ function updateSnake(deltaSeconds) {
   if (alive.length === 1 && !state.winnerShown) {
     state.winnerShown = true;
     state.paused = true;
-    showWinnerOverlay(alive[0]);
+    showWinnerOverlay(alive[0], forceReset);
   } else if (alive.length === 0 && !state.gameOverLogged) {
     state.gameOverLogged = true;
     state.paused = true;
-    showDrawOverlay();
+    showDrawOverlay(forceReset);
   }
 }
 
@@ -576,88 +340,6 @@ function forceReset() {
 }
 
 window.forceReset = forceReset;
-
-// Create a simple winner overlay UI
-function _ensureWinnerStyles() {
-  if (document.getElementById('winnerOverlayStyles')) return;
-  const s = document.createElement('style');
-  s.id = 'winnerOverlayStyles';
-  s.textContent = `
-    #winnerOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:10000; }
-    #winnerBox { background:#111; color:#fff; padding:20px; border-radius:8px; border:1px solid #444; min-width:280px; text-align:center; }
-    #winnerBox h2 { margin:0 0 12px 0; }
-    #winnerBox p { margin:8px 0; }
-    #winnerBox button { margin-top:12px; padding:8px 12px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; cursor:pointer; }
-  `;
-  document.head.appendChild(s);
-}
-
-function showWinnerOverlay(player) {
-  try {
-    _ensureWinnerStyles();
-    const existing = document.getElementById('winnerOverlay');
-    if (existing) existing.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'winnerOverlay';
-    const box = document.createElement('div');
-    box.id = 'winnerBox';
-    const title = document.createElement('h2');
-    title.textContent = 'Winner!';
-    const name = document.createElement('p');
-    name.textContent = `${player.name || ('Player ' + player.id)} wins!`;
-    const sw = document.createElement('div');
-    sw.style.width = '28px';
-    sw.style.height = '14px';
-    sw.style.margin = '8px auto';
-    sw.style.borderRadius = '4px';
-    const r = Math.round((player.color[0] || 1) * 255);
-    const g = Math.round((player.color[1] || 1) * 255);
-    const b = Math.round((player.color[2] || 1) * 255);
-    sw.style.background = `rgb(${r}, ${g}, ${b})`;
-
-    const btn = document.createElement('button');
-    btn.textContent = 'Play Again';
-    btn.addEventListener('click', () => {
-      try { document.body.removeChild(overlay); } catch (e) {}
-      forceReset();
-    });
-
-    box.appendChild(title);
-    box.appendChild(name);
-    box.appendChild(sw);
-    box.appendChild(btn);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-  } catch (e) {
-    console.error('showWinnerOverlay failed', e);
-  }
-}
-
-function showDrawOverlay() {
-  try {
-    _ensureWinnerStyles();
-    const existing = document.getElementById('winnerOverlay');
-    if (existing) existing.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'winnerOverlay';
-    const box = document.createElement('div');
-    box.id = 'winnerBox';
-    const title = document.createElement('h2');
-    title.textContent = 'Draw';
-    const msg = document.createElement('p');
-    msg.textContent = 'All players eliminated.';
-    const btn = document.createElement('button');
-    btn.textContent = 'Play Again';
-    btn.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} forceReset(); });
-    box.appendChild(title);
-    box.appendChild(msg);
-    box.appendChild(btn);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-  } catch (e) {
-    console.error('showDrawOverlay failed', e);
-  }
-}
 
 function updatePlayer(player, deltaSeconds) {
   if (!player || !player.isAlive) return;
