@@ -21,12 +21,14 @@ export function createInitialGameState() {
   const savedConfig = loadPlayerConfig();
   const defaultConfig = [
     { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' },
-    { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' }
+    { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' },
+    { name: 'Player 3', color: '#66ff66', controls: 'A / D' },
+    { name: 'Player 4', color: '#ffaa66', controls: 'J / L' }
   ];
   const effectiveConfig = (Array.isArray(savedConfig) && savedConfig.length >= 2) ? savedConfig : defaultConfig;
 
-  const players = effectiveConfig.map((cfg, idx) => {
-    const start = (idx === 0) ? player1Start : (idx === 1) ? player2Start : generateRandomStartingPosition();
+  const players = effectiveConfig.slice(0, 4).map((cfg, idx) => {
+    const start = generateRandomStartingPosition();
     return {
       id: idx + 1,
       clientId: null,
@@ -40,7 +42,7 @@ export function createInitialGameState() {
       isTurningLeft: false,
       isTurningRight: false,
       color: hexToRgbArray(cfg.color),
-      controls: cfg.controls || (idx === 1 ? 'Mouse Left / Mouse Right' : 'ArrowLeft / ArrowRight'),
+      controls: cfg.controls || defaultConfig[idx].controls,
       score: 0,
       _deathProcessed: false
     };

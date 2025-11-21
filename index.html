@@ -10,16 +10,7 @@
   <div class="controls-info">
     <h2>Achtung die Kurve - Two Player Edition</h2>
     <div class="player-controls">
-      <div class="player1 player-card">
-        <h3><span class="swatch" style="width:12px;height:12px;background:#ff6666;display:inline-block;border-radius:2px;margin-right:8px;"></span>Player 1 (Red)</h3>
-        <p>Left Arrow: Turn Left</p>
-        <p>Right Arrow: Turn Right</p>
-      </div>
-      <div class="player2 player-card">
-        <h3><span class="swatch" style="width:12px;height:12px;background:#6666ff;display:inline-block;border-radius:2px;margin-right:8px;"></span>Player 2 (Blue)</h3>
-        <p>Left Mouse Button: Turn Left</p>
-        <p>Right Mouse Button: Turn Right</p>
-      </div>
+      <div id="roster" class="roster"></div>
     </div>
     <div class="game-info">
       <p>Avoid hitting boundaries and trails.</p>
@@ -40,6 +31,47 @@
       </div>
   </div>
   <canvas id="gameCanvas"></canvas>
+
+  <div class="mode-overlay" id="modeOverlay">
+    <div class="mode-card">
+      <h3>Select mode</h3>
+      <p>Choose local 4-player or multiplayer via Firebase.</p>
+      <div class="actions">
+        <button id="selectLocal" class="primary">Local</button>
+        <button id="selectMp">Multiplayer</button>
+      </div>
+      <div id="mpConfig" style="display:none;">
+        <div class="prefs-form">
+          <label>Name <input id="prefName" placeholder="Player" /></label>
+          <label>Color <input id="prefColor" type="color" value="#66ccff" /></label>
+          <label>Controls
+            <select id="prefControls">
+              <option value="ArrowLeft / ArrowRight">ArrowLeft / ArrowRight</option>
+              <option value="W / S">W / S</option>
+              <option value="A / D">A / D</option>
+              <option value="J / L">J / L</option>
+              <option value="Mouse Left / Mouse Right">Mouse Left / Mouse Right</option>
+              <option value="Num4 / Num6">Num4 / Num6</option>
+            </select>
+          </label>
+        </div>
+        <div class="multiplayer-panel" style="margin-top:10px;">
+          <label>Room ID</label>
+          <input id="roomIdInput" placeholder="room-xxxxxx" />
+          <div class="actions">
+            <button id="createRoomBtn">Create</button>
+            <button id="joinRoomBtn">Join</button>
+          </div>
+          <small id="mpStatus">Offline</small>
+          <small id="mpLatency">Latency: --</small>
+        </div>
+        <div class="actions" style="justify-content:flex-end;">
+          <button id="mpReadyBtn" class="primary">Ready</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <script type="module" src="script.js"></script>
 </body>
 </html>

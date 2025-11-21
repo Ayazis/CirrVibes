@@ -36,6 +36,8 @@ window.gameState = createInitialGameState();
 
 updateControlsInfoUI(window.gameState.players);
 window.updateControlsInfoUI = updateControlsInfoUI;
+renderRoster(window.gameState.players);
+renderRoster(window.gameState.players);
 
 // Attach input handlers for current state (local play)
 let detachInput = attachInputHandlers(window.gameState);
@@ -45,11 +47,13 @@ window.resetGame = () => resetGame(window.gameState);
 window.forceReset = () => forceReset(window.gameState);
 
 // Multiplayer POC globals/state
-let mpMode = null; // 'host' | 'guest' | null
+let mpMode = null; // 'host' | 'guest' | 'local' | null
 let roomClient = null;
 let inputSeq = 0;
 let loopStarted = false;
 let loopController = null;
+let pendingPrefs = null;
+let capturePrefs = null;
 
 function startLoopWithCallbacks(callbacks) {
   if (loopStarted) return;
@@ -84,9 +88,117 @@ function getPlayerInfo() {
   return { name: p1.name || 'Player', color: '#ff6666', controls: p1.controls || '' };
 }
 
+function rgbaFromHex(hex) {
+  let h = (hex || '').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const r = parseInt(h.slice(0, 2) || 'ff', 16) / 255;
+  const g = parseInt(h.slice(2, 4) || 'ff', 16) / 255;
+  const b = parseInt(h.slice(4, 6) || 'ff', 16) / 255;
+  return [r, g, b, 1];
+}
+
+function cssFromColor(arrOrHex) {
+  if (typeof arrOrHex === 'string') return arrOrHex;
+  if (Array.isArray(arrOrHex)) {
+    const [r, g, b] = arrOrHex;
+    return `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+  }
+  return '#cccccc';
+}
+
+function renderRoster(players) {
+  const el = document.getElementById('roster');
+  if (!el) return;
+  const cards = (players || [])
+    .filter((p, idx) => p && (idx === 0 || p.clientId))
+    .map((p) => {
+    const color = cssFromColor(p.color);
+    const name = p.name || `Player ${p.id}`;
+    const controls = p.controls || '';
+    return `<div class="card"><h4><span class="swatch" style="background:${color};"></span>${name}</h4><div>${controls}</div></div>`;
+  }).join('');
+  el.innerHTML = cards;
+}
+
+function applyLocalPrefs() {
+  if (!pendingPrefs || !window.gameState?.players?.[0]) return;
+  const p = window.gameState.players[0];
+  p.name = pendingPrefs.name || p.name;
+  p.controls = pendingPrefs.controls || p.controls;
+  p.color = rgbaFromHex(pendingPrefs.color || '#66ccff');
+  updateControlsInfoUI(window.gameState.players);
+  renderRoster(window.gameState.players);
+  if (detachInput) try { detachInput(); } catch (e) {}
+  detachInput = attachInputHandlers(window.gameState);
+}
+
+function assignRemotePlayers(remotePlayers) {
+  if (!window.gameState) return;
+  const list = Object.values(remotePlayers || {}).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+  let slot = 1;
+  list.forEach((rp) => {
+    if (rp.id === roomClient?.playerId) return;
+    if (slot >= window.gameState.players.length) return;
+    const target = window.gameState.players[slot];
+    target.clientId = rp.id || rp.playerId;
+    target.name = rp.name || target.name;
+    target.controls = rp.controls || target.controls;
+    target.color = rp.color ? rgbaFromHex(rp.color) : target.color;
+    slot += 1;
+  });
+  updateControlsInfoUI(window.gameState.players);
+  renderRoster(window.gameState.players);
+  updateMpStatus(`Players: ${Math.min(slot, window.gameState.players.length)} / ${window.gameState.players.length}`);
+}
+
+function initModeOverlay() {
+  const overlay = document.getElementById('modeOverlay');
+  const mpConfig = document.getElementById('mpConfig');
+  const selectLocal = document.getElementById('selectLocal');
+  const selectMp = document.getElementById('selectMp');
+  const readyBtn = document.getElementById('mpReadyBtn');
+  const nameInput = document.getElementById('prefName');
+  const colorInput = document.getElementById('prefColor');
+  const controlsInput = document.getElementById('prefControls');
+
+  capturePrefs = () => ({
+    name: (nameInput && nameInput.value) || 'Player',
+    color: (colorInput && colorInput.value) || '#66ccff',
+    controls: (controlsInput && controlsInput.value) || 'ArrowLeft / ArrowRight'
+  });
+
+  if (selectLocal) {
+    selectLocal.addEventListener('click', () => {
+      mpMode = 'local';
+      pendingPrefs = capturePrefs();
+      applyLocalPrefs();
+      if (mpConfig) mpConfig.style.display = 'none';
+      if (overlay) overlay.style.display = 'none';
+      updateMpStatus('Local mode');
+    });
+  }
+
+  if (selectMp) {
+    selectMp.addEventListener('click', () => {
+      if (mpConfig) mpConfig.style.display = 'block';
+    });
+  }
+
+  if (readyBtn) {
+    readyBtn.addEventListener('click', () => {
+      pendingPrefs = capturePrefs();
+      applyLocalPrefs();
+      if (overlay) overlay.style.display = 'none';
+      updateMpStatus('Ready - create or join a room');
+    });
+  }
+}
+
 async function startHost(roomId) {
   mpMode = 'host';
-  roomClient = new RoomClient({ roomId, playerInfo: getPlayerInfo(), isHost: true });
+  applyLocalPrefs();
+  const info = pendingPrefs || getPlayerInfo();
+  roomClient = new RoomClient({ roomId, playerInfo: info, isHost: true });
   try {
     updateMpStatus('Connecting as host...');
     await roomClient.joinRoom();
@@ -100,11 +212,7 @@ async function startHost(roomId) {
   }
 
   roomClient.listenPlayers((players) => {
-    const others = Object.values(players || {}).filter((p) => p.id !== roomClient.playerId);
-    const second = others[0];
-    if (second && window.gameState?.players?.[1]) {
-      window.gameState.players[1].clientId = second.id || second.playerId || second.name;
-    }
+    assignRemotePlayers(players);
   });
 
   roomClient.listenInputs((inputs) => {
@@ -145,7 +253,9 @@ async function startHost(roomId) {
 
 async function startGuest(roomId) {
   mpMode = 'guest';
-  roomClient = new RoomClient({ roomId, playerInfo: getPlayerInfo(), isHost: false });
+  applyLocalPrefs();
+  const info = pendingPrefs || getPlayerInfo();
+  roomClient = new RoomClient({ roomId, playerInfo: info, isHost: false });
   try {
     updateMpStatus('Joining room...');
     await roomClient.joinRoom();
@@ -154,10 +264,14 @@ async function startGuest(roomId) {
     updateMpError(`Join failed: ${e?.message || e}`);
     return;
   }
-  if (window.gameState?.players?.[1]) {
-    window.gameState.players[1].clientId = roomClient.playerId;
+  if (window.gameState?.players?.[0]) {
+    window.gameState.players[0].clientId = roomClient.playerId;
   }
   if (window.gameState) window.gameState.paused = true;
+
+  roomClient.listenPlayers((players) => {
+    assignRemotePlayers(players);
+  });
 
   roomClient.listenState((state) => {
     const players = window.gameState?.players || [];
@@ -197,22 +311,29 @@ function wireMultiplayerUI() {
   const joinBtn = document.getElementById('joinRoomBtn');
   const input = document.getElementById('roomIdInput');
   if (!createBtn || !joinBtn || !input) return;
+  const ensurePrefs = () => {
+    if (!pendingPrefs && capturePrefs) pendingPrefs = capturePrefs();
+    applyLocalPrefs();
+  };
 
   createBtn.addEventListener('click', async () => {
     const newId = createRoomId();
     input.value = newId;
+    ensurePrefs();
     await startHost(newId);
   });
 
   joinBtn.addEventListener('click', async () => {
     const roomId = input.value.trim();
     if (!roomId) return;
+    ensurePrefs();
     await startGuest(roomId);
   });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   wireMultiplayerUI();
+  initModeOverlay();
 });
 
 // Start the fixed-timestep game loop (local only by default)

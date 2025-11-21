@@ -158,3 +158,71 @@ canvas {
   color: #aaa;
   font-size: 12px;
 }
+
+/* Mode selection overlay */
+.mode-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.mode-card {
+  background: #111;
+  border: 1px solid #444;
+  border-radius: 12px;
+  padding: 20px;
+  width: 360px;
+  color: #f0f0f0;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mode-card h3 { margin: 0; }
+.mode-card p { margin: 0; color: #cfcfcf; }
+.mode-card .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.mode-card button { padding: 10px 12px; border-radius: 8px; border: 1px solid #666; background: #1c1c1c; color: #f0f0f0; cursor: pointer; }
+.mode-card button.primary { background: #0b7; border-color: #0b7; color: #012; font-weight: 700; }
+
+.prefs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prefs-form label { font-size: 12px; color: #ddd; }
+.prefs-form input, .prefs-form select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #555;
+  background: #0d0d0d;
+  color: #f0f0f0;
+}
+
+.roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150, 1fr));
+  gap: 8px;
+}
+.roster .card {
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255,255,255,0.05);
+}
+.roster .card h4 {
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.roster .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}

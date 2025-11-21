@@ -18,6 +18,9 @@ export function buildInputMappings(players) {
       controlsMap.set('arrowright', { playerIndex: idx, side: 'right' });
     } else if (cfg.includes('mouse')) {
       mousePlayerIndex = idx;
+    } else if (cfg.includes('w / s') || (cfg.includes('w') && cfg.includes('s'))) {
+      controlsMap.set('w', { playerIndex: idx, side: 'left' });
+      controlsMap.set('s', { playerIndex: idx, side: 'right' });
     } else if (cfg.includes('a / d') || (cfg.includes('a') && cfg.includes('d'))) {
       controlsMap.set('a', { playerIndex: idx, side: 'left' });
       controlsMap.set('d', { playerIndex: idx, side: 'right' });
