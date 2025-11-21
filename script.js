@@ -7,11 +7,11 @@ import {
   TRAIL_SAFE_FRAMES,
   FIXED_TIMESTEP_MS
 } from './src/constants.js';
-import { distanceToLineSegmentSq } from './src/math.js';
 import { Trail } from './src/trail.js';
 import { OccupancyGrid } from './src/occupancyGrid.js';
 import { getCanvasAspect, computeViewBounds, generateRandomStartingPosition } from './src/viewUtils.js';
 import { loadPlayerConfig } from './src/persistence.js';
+import { checkTrailCollision, checkTrailSegmentCollision } from './src/collision.js';
 
 // First-start menu (only shown once). Injects a simple overlay that lets the user add extra players,
 // shows each player's color and their control scheme, and saves the choice to localStorage.
@@ -686,7 +686,7 @@ function updatePlayer(player, deltaSeconds) {
     return;
   }
 
-  if (checkTrailCollision(newX, newY, player)) {
+  if (checkTrailCollision(newX, newY, player, window.gameState)) {
     player.isAlive = false;
     awardPointsForDeath(player);
     return;
@@ -704,44 +704,6 @@ function updatePlayer(player, deltaSeconds) {
   if (grid) {
     grid.occupySegment(lastPoint.x, lastPoint.y, newX, newY, player.id, window.gameState.frameCounter, TRAIL_WIDTH);
   }
-}
-
-// Check if a position collides with any trail
-function checkTrailCollision(x, y, currentPlayer) {
-  const state = window.gameState;
-  if (!state) return false;
-  const grid = state.occupancyGrid;
-  if (grid) {
-    return grid.checkCollision(x, y, TRAIL_COLLISION_RADIUS, currentPlayer.id, state.frameCounter);
-  }
-
-  const playersArr = state.players || [];
-  for (let i = 0; i < playersArr.length; i++) {
-    const player = playersArr[i];
-    if (!player || !player.trail) continue;
-    if (checkTrailSegmentCollision(x, y, player.trail, TRAIL_COLLISION_RADIUS, player === currentPlayer, TRAIL_SAFE_FRAMES)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Check collision with a specific trail
-function checkTrailSegmentCollision(x, y, trail, radius, isOwnTrail, skipPoints) {
-  if (!trail || trail.length < 2) return false;
-  const skip = isOwnTrail ? Math.max(0, skipPoints) : 0;
-  const maxIndex = trail.length - 1 - skip;
-  if (maxIndex <= 0) return false;
-  const radiusSq = radius * radius;
-  const temp1 = { x: 0, y: 0 };
-  const temp2 = { x: 0, y: 0 };
-  for (let i = 0; i < maxIndex; i++) {
-    const p1 = trail.get(i, temp1);
-    const p2 = trail.get(i + 1, temp2);
-    const distSq = distanceToLineSegmentSq(x, y, p1.x, p1.y, p2.x, p2.y);
-    if (distSq < radiusSq) return true;
-  }
-  return false;
 }
 
 // Start the fixed-timestep game loop
