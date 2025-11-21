@@ -6,6 +6,9 @@ import { initGame } from './src/initGame.js';
 // Create (or re-open) the player configuration overlay. This function is safe to call multiple times.
 function openPlayerConfigMenu() {
   try {
+    if (window.gameState) {
+      window.gameState.paused = true;
+    }
     // If an overlay already exists, bring it to front
     const existing = document.getElementById('firstStartMenuOverlay');
     if (existing) {
@@ -126,14 +129,16 @@ function openPlayerConfigMenu() {
 
     const startBtn = document.createElement('button');
     startBtn.className = 'primary';
-    startBtn.textContent = 'Save & Reload';
+    startBtn.textContent = 'Start';
     startBtn.addEventListener('click', () => {
       try {
         localStorage.setItem('firstStartDone', 'true');
         localStorage.setItem('playerConfig', JSON.stringify(players.map(p => ({ name: p.name, color: p.color, controls: p.controls }))));
       } catch (e) { console.warn('Could not save player settings:', e); }
+      if (window.gameState) {
+        window.gameState.paused = false;
+      }
       try { document.body.removeChild(overlay); } catch (e) {}
-      location.reload();
     });
 
     actions.appendChild(addBtn);
@@ -151,10 +156,11 @@ function openPlayerConfigMenu() {
   }
 }
 
-// If the user hasn't completed first-start, open it on first load
+const shouldPauseForFirstStart = true;
+
+// Always open the player configuration overlay on every page load
 try {
-  const done = localStorage.getItem('firstStartDone');
-  if (done !== 'true') openPlayerConfigMenu();
+  openPlayerConfigMenu();
 } catch (e) {}
 
 // Wire up the player selection button in the main UI
@@ -525,7 +531,8 @@ window.gameState = {
   players,
   viewSize: VIEW_SIZE,
   viewBounds: computeViewBounds(),
-  frameCounter: 0
+  frameCounter: 0,
+  paused: shouldPauseForFirstStart
 };
 
 // Backwards-compatible aliases used by existing code
