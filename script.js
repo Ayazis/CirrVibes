@@ -10,6 +10,8 @@ import {
 import { distanceToLineSegmentSq } from './src/math.js';
 import { Trail } from './src/trail.js';
 import { OccupancyGrid } from './src/occupancyGrid.js';
+import { getCanvasAspect, computeViewBounds, generateRandomStartingPosition } from './src/viewUtils.js';
+import { loadPlayerConfig } from './src/persistence.js';
 
 // First-start menu (only shown once). Injects a simple overlay that lets the user add extra players,
 // shows each player's color and their control scheme, and saves the choice to localStorage.
@@ -199,46 +201,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btn) btn.addEventListener('click', openPlayerConfigMenu);
 });
 
-function getCanvasAspect() {
-  const canvas = document.getElementById('gameCanvas');
-  if (canvas && canvas.height) {
-    return canvas.width / canvas.height;
-  }
-  return DEFAULT_ASPECT;
-}
-
-function computeViewBounds() {
-  const state = window.gameState;
-  if (state && state.viewBounds) {
-    return state.viewBounds;
-  }
-  const aspect = getCanvasAspect();
-  const horizontalBoundary = VIEW_SIZE * aspect;
-  const verticalBoundary = VIEW_SIZE;
-  return {
-    minX: -horizontalBoundary,
-    maxX: horizontalBoundary,
-    minY: -verticalBoundary,
-    maxY: verticalBoundary
-  };
-}
-
-// Function to generate random starting positions and angles for snakes
-function generateRandomStartingPosition() {
-  const bounds = computeViewBounds();
-  const safeMargin = 1;
-  const minX = bounds.minX + safeMargin;
-  const maxX = bounds.maxX - safeMargin;
-  const minY = bounds.minY + safeMargin;
-  const maxY = bounds.maxY - safeMargin;
-  const horizontalRange = Math.max(0, maxX - minX);
-  const verticalRange = Math.max(0, maxY - minY);
-  const x = minX + Math.random() * horizontalRange;
-  const y = minY + Math.random() * verticalRange;
-  const direction = Math.random() * 360;
-  return { x, y, direction };
-}
-
 initGame();
 
 // Generate random starting positions for both players
@@ -259,13 +221,7 @@ function hexToRgbArray(hex) {
   return [r, g, b, 1.0];
 }
 
-const savedConfig = (() => {
-  try {
-    return JSON.parse(localStorage.getItem('playerConfig') || 'null');
-  } catch (e) {
-    return null;
-  }
-})();
+const savedConfig = loadPlayerConfig();
 
 const defaultConfig = [
   { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' },
