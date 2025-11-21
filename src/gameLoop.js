@@ -152,6 +152,18 @@ export function startFixedStepLoop(state, callbacks = {}) {
   let accumulator = 0;
   const stepMs = FIXED_TIMESTEP_MS;
   const stepSeconds = stepMs / 1000;
+
+  let callbackBag = callbacks || {};
+  let publish = callbackBag.publishState;
+  let publishIntervalMs = 1000 / (callbackBag.publishHz || 10);
+  let lastPublish = 0;
+
+  function setCallbacks(next) {
+    callbackBag = next || {};
+    publish = callbackBag.publishState;
+    publishIntervalMs = 1000 / (callbackBag.publishHz || 10);
+  }
+
   function frame(now) {
     if (lastTime == null) lastTime = now;
     let delta = now - lastTime;
@@ -159,10 +171,22 @@ export function startFixedStepLoop(state, callbacks = {}) {
     if (delta > 250) delta = stepMs;
     accumulator += delta;
     while (accumulator >= stepMs) {
-      updateSnake(stepSeconds, state, callbacks);
+      updateSnake(stepSeconds, state, callbackBag);
       accumulator -= stepMs;
     }
+
+    if (publish && now - lastPublish >= publishIntervalMs) {
+      lastPublish = now;
+      try {
+        publish(state);
+      } catch (e) {
+        // ignore publish errors in loop
+      }
+    }
+
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  return { setCallbacks };
 }

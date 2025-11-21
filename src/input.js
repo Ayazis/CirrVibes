@@ -16,35 +16,37 @@ export function buildInputMappings(players) {
     if (cfg.includes('arrow')) {
       controlsMap.set('arrowleft', { playerIndex: idx, side: 'left' });
       controlsMap.set('arrowright', { playerIndex: idx, side: 'right' });
-      controlsMap.set('arrowleft', { playerIndex: idx, side: 'left' });
-      controlsMap.set('arrowright', { playerIndex: idx, side: 'right' });
     } else if (cfg.includes('mouse')) {
       mousePlayerIndex = idx;
     } else if (cfg.includes('a / d') || (cfg.includes('a') && cfg.includes('d'))) {
       controlsMap.set('a', { playerIndex: idx, side: 'left' });
       controlsMap.set('d', { playerIndex: idx, side: 'right' });
-      controlsMap.set('A', { playerIndex: idx, side: 'left' });
-      controlsMap.set('D', { playerIndex: idx, side: 'right' });
     } else if (cfg.includes('num4') || cfg.includes('num6') || cfg.includes('numpad')) {
       controlsMap.set('numpad4', { playerIndex: idx, side: 'left' });
       controlsMap.set('numpad6', { playerIndex: idx, side: 'right' });
-      controlsMap.set('4', { playerIndex: idx, side: 'left' });
-      controlsMap.set('6', { playerIndex: idx, side: 'right' });
     } else if (cfg.includes('j / l') || (cfg.includes('j') && cfg.includes('l'))) {
       controlsMap.set('j', { playerIndex: idx, side: 'left' });
       controlsMap.set('l', { playerIndex: idx, side: 'right' });
-      controlsMap.set('J', { playerIndex: idx, side: 'left' });
-      controlsMap.set('L', { playerIndex: idx, side: 'right' });
     }
   });
   return { controlsMap, mousePlayerIndex };
 }
 
-export function attachInputHandlers(state) {
+export function attachInputHandlers(options) {
+  const isStateWithPlayers = options && Array.isArray(options.players);
+  const state = isStateWithPlayers ? options : null;
+  const onInputChange = isStateWithPlayers ? options.onInputChange : null;
   if (!state || !state.players) return () => {};
   buildInputMappings(state.players);
 
+  const isTypingTarget = (el) => {
+    if (!el) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+  };
+
   const keydown = (event) => {
+    if (isTypingTarget(event.target)) return;
     const keyId = (event.key || '').toLowerCase();
     const codeId = (event.code || '').toLowerCase();
     const mapped = controlsMap.get(keyId) || controlsMap.get(codeId);
@@ -54,10 +56,12 @@ export function attachInputHandlers(state) {
       if (!player || !player.isAlive) return;
       if (mapped.side === 'left') player.isTurningLeft = true;
       else player.isTurningRight = true;
+      if (onInputChange) onInputChange(mapped.playerIndex, { isTurningLeft: player.isTurningLeft, isTurningRight: player.isTurningRight });
     }
   };
 
   const keyup = (event) => {
+    if (isTypingTarget(event.target)) return;
     const keyId = (event.key || '').toLowerCase();
     const codeId = (event.code || '').toLowerCase();
     const mapped = controlsMap.get(keyId) || controlsMap.get(codeId);
@@ -67,10 +71,12 @@ export function attachInputHandlers(state) {
       if (!player) return;
       if (mapped.side === 'left') player.isTurningLeft = false;
       else player.isTurningRight = false;
+      if (onInputChange) onInputChange(mapped.playerIndex, { isTurningLeft: player.isTurningLeft, isTurningRight: player.isTurningRight });
     }
   };
 
   const mousedown = (event) => {
+    if (isTypingTarget(event.target)) return;
     if (mousePlayerIndex === null) return;
     const player = state.players[mousePlayerIndex];
     if (!player || !player.isAlive) return;
@@ -84,11 +90,13 @@ export function attachInputHandlers(state) {
       mouseState.rightButton = true;
       player.isTurningRight = true;
     }
+    if (onInputChange) onInputChange(mousePlayerIndex, { isTurningLeft: player.isTurningLeft, isTurningRight: player.isTurningRight });
 
     event.preventDefault();
   };
 
   const mouseup = (event) => {
+    if (isTypingTarget(event.target)) return;
     if (mousePlayerIndex === null) return;
     const player = state.players[mousePlayerIndex];
     if (!player) return;
@@ -102,6 +110,7 @@ export function attachInputHandlers(state) {
     }
 
     if (!mouseState.leftButton && !mouseState.rightButton) mouseState.isPressed = false;
+    if (onInputChange) onInputChange(mousePlayerIndex, { isTurningLeft: player.isTurningLeft, isTurningRight: player.isTurningRight });
   };
 
   const contextmenu = (event) => {

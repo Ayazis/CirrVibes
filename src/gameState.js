@@ -29,6 +29,7 @@ export function createInitialGameState() {
     const start = (idx === 0) ? player1Start : (idx === 1) ? player2Start : generateRandomStartingPosition();
     return {
       id: idx + 1,
+      clientId: null,
       name: cfg.name || `Player ${idx + 1}`,
       snakePosition: { x: start.x, y: start.y },
       snakeDirection: start.direction,
@@ -62,7 +63,7 @@ export function createInitialGameState() {
     viewSize: VIEW_SIZE,
     viewBounds,
     frameCounter: 0,
-    paused: Boolean(window.playerConfigMenuOpen),
+    paused: true,
     occupancyGrid
   };
 
