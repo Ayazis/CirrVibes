@@ -62,6 +62,16 @@ function updateMpStatus(text) {
   if (el) el.textContent = text;
 }
 
+function updateLatency(ms) {
+  const el = document.getElementById('mpLatency');
+  if (!el) return;
+  if (ms == null) {
+    el.textContent = 'Latency: --';
+    return;
+  }
+  el.textContent = `Latency: ${Math.max(0, Math.round(ms))} ms`;
+}
+
 function updateMpError(text) {
   const el = document.getElementById('mpStatus');
   if (el) el.textContent = text;
@@ -160,6 +170,10 @@ async function startGuest(roomId) {
       players[idx].score = p.score;
     });
     try { updateControlsInfoUI(window.gameState.players); } catch (e) {}
+    if (state.lastUpdate) {
+      const lag = Date.now() - state.lastUpdate;
+      updateLatency(lag);
+    }
   });
 
   // Mirror local input state into Firebase intent
