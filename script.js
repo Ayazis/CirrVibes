@@ -10,6 +10,7 @@ function openPlayerConfigMenu() {
     const existing = document.getElementById('firstStartMenuOverlay');
     if (existing) {
       existing.style.display = 'flex';
+      try { window.playerConfigMenuOpen = true; if (window.gameState) window.gameState.paused = true; } catch (e) {}
       return;
     }
 
@@ -132,18 +133,39 @@ function openPlayerConfigMenu() {
         localStorage.setItem('firstStartDone', 'true');
         localStorage.setItem('playerConfig', JSON.stringify(players.map(p => ({ name: p.name, color: p.color, controls: p.controls }))));
       } catch (e) { console.warn('Could not save player settings:', e); }
-      try { document.body.removeChild(overlay); } catch (e) {}
-      location.reload();
+      // Ensure we clear the open flag and unpause the game if it's initialized.
+      try { window.playerConfigMenuOpen = false; if (window.gameState) window.gameState.paused = false; } catch (e) {}
+      // Remove any overlay element by id (robust against scope / re-creations)
+      try {
+        const el = document.getElementById('firstStartMenuOverlay');
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      } catch (e) {}
+      // Reload to apply saved settings (keep for legacy behavior)
+      try { location.reload(); } catch (e) {}
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'ghost';
+    closeBtn.textContent = 'Close';
+    closeBtn.addEventListener('click', () => {
+      try { window.playerConfigMenuOpen = false; if (window.gameState) window.gameState.paused = false; } catch (e) {}
+      // Remove overlay by id to avoid closure-scope issues
+      try {
+        const el = document.getElementById('firstStartMenuOverlay');
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      } catch (e) {}
     });
 
     actions.appendChild(addBtn);
     actions.appendChild(resetBtn);
+    actions.appendChild(closeBtn);
     actions.appendChild(startBtn);
 
     menu.appendChild(title);
     menu.appendChild(description);
     menu.appendChild(list);
     menu.appendChild(actions);
+    try { window.playerConfigMenuOpen = true; if (window.gameState) window.gameState.paused = true; } catch (e) {}
     overlay.appendChild(menu);
     document.body.appendChild(overlay);
   } catch (err) {
@@ -151,11 +173,14 @@ function openPlayerConfigMenu() {
   }
 }
 
-// If the user hasn't completed first-start, open it on first load
-try {
-  const done = localStorage.getItem('firstStartDone');
-  if (done !== 'true') openPlayerConfigMenu();
-} catch (e) {}
+ // Open the player config on initial page load only when the user hasn't completed first-start.
+ // This avoids reopening the overlay after Save & Reload.
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const done = localStorage.getItem('firstStartDone');
+    if (done !== 'true') openPlayerConfigMenu();
+  } catch (e) {}
+});
 
 // Wire up the player selection button in the main UI
 document.addEventListener('DOMContentLoaded', () => {
@@ -525,7 +550,8 @@ window.gameState = {
   players,
   viewSize: VIEW_SIZE,
   viewBounds: computeViewBounds(),
-  frameCounter: 0
+  frameCounter: 0,
+  paused: Boolean(window.playerConfigMenuOpen)
 };
 
 // Backwards-compatible aliases used by existing code
