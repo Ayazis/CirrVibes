@@ -24,6 +24,8 @@ let localReady = false;
 let hasSelectedMultiplayer = false;
 let prefInputs = [];
 let lastAppliedSpawnKey = null;
+let showLobbyOnWaiting = false;
+let lastResultShownKey = null;
 
 const MIN_MULTIPLAYER_PLAYERS = 2;
 
@@ -101,6 +103,77 @@ function updateMpError(text) {
   const el = document.getElementById('mpStatus');
   if (el) el.textContent = text;
   console.error('[multiplayer]', text);
+}
+
+function dismissResultOverlay() {
+  const overlay = document.getElementById('winnerOverlay');
+  if (overlay && overlay.parentNode) {
+    overlay.parentNode.removeChild(overlay);
+  }
+}
+
+function clearResultState() {
+  dismissResultOverlay();
+  lastResultShownKey = null;
+}
+
+function getPlayAgainOptions() {
+  if (mpMode === 'guest') {
+    return { disablePlayAgain: true, disabledMessage: 'Waiting for host to restart' };
+  }
+  return undefined;
+}
+
+function normalizeColorPayload(color) {
+  if (!color) return rgbaFromHex('#ffffff');
+  return Array.isArray(color) ? color : rgbaFromHex(color);
+}
+
+function resolveResultPlayer(playerInfo = {}) {
+  const list = window.gameState?.players || [];
+  const byClient = playerInfo.clientId ? list.find((p) => p?.clientId === playerInfo.clientId) : null;
+  const byId = !byClient && playerInfo.id ? list.find((p) => p?.id === playerInfo.id) : null;
+  const match = byClient || byId;
+  if (match) {
+    return {
+      id: match.id,
+      name: match.name,
+      color: match.color
+    };
+  }
+  return {
+    id: playerInfo.id,
+    name: playerInfo.name,
+    color: normalizeColorPayload(playerInfo.color)
+  };
+}
+
+function showMatchResult(result) {
+  if (!result || !window.gameState) return;
+  if (result.key) lastResultShownKey = result.key;
+  const options = getPlayAgainOptions();
+  const callback = () => {
+    if (mpMode === 'host') {
+      beginHostedMatch();
+    } else {
+      forceReset(window.gameState);
+    }
+  };
+  if (result.type === 'win' && result.player) {
+    const playerData = resolveResultPlayer(result.player);
+    playerData.color = normalizeColorPayload(playerData.color);
+    showWinnerOverlay(playerData, callback, options);
+  } else if (result.type === 'draw') {
+    showDrawOverlay(callback, options);
+  }
+}
+
+function createResultPayload(type, extra = {}) {
+  return {
+    key: `result-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    type,
+    ...extra
+  };
 }
 
 function logPlayerPositions(context = 'snapshot') {
@@ -328,13 +401,15 @@ async function beginHostedMatch() {
   lobbyMeta = { ...(lobbyMeta || {}), status: 'running', startedAt: startTs };
   updateLobbyUi();
   setModeOverlayState('hidden');
+  clearResultState();
   try {
+    showLobbyOnWaiting = false;
     await broadcastSpawnSnapshot();
   } catch (e) {
     console.warn('Spawn snapshot failed', e);
   }
   try {
-    await roomClient.updateMeta({ status: 'running', startedAt: startTs });
+    await roomClient.updateMeta({ status: 'running', startedAt: startTs, lastResult: null });
   } catch (e) {
     updateMpError(`Failed to start match: ${e?.message || e}`);
   }
@@ -355,10 +430,16 @@ function handleMetaChange(meta = {}) {
     applySpawnSnapshot(snapshot);
     lastAppliedSpawnKey = snapshot.key;
   }
+  const result = lobbyMeta.lastResult;
+  if (result?.key && result.key !== lastResultShownKey) {
+    showMatchResult(result);
+  }
   if (!hasSelectedMultiplayer) return;
   if (status === 'running') {
+    showLobbyOnWaiting = false;
+    clearResultState();
     setModeOverlayState('hidden');
-  } else if (mpMode === 'host' || mpMode === 'guest') {
+  } else if ((mpMode === 'host' || mpMode === 'guest') && showLobbyOnWaiting) {
     setModeOverlayState('lobby');
   }
   updateLobbyUi();
@@ -377,6 +458,8 @@ function resetLobbyState() {
   mpMode = mpMode === 'local' ? 'local' : null;
   setPrefInputsDisabled(false);
   lastAppliedSpawnKey = null;
+  showLobbyOnWaiting = false;
+  clearResultState();
   renderLobbyPlayers(lobbyPlayers);
   updateLobbyUi();
   updateLatency(null);
@@ -605,6 +688,7 @@ function initModeOverlay() {
       resetLobbyState();
       mpMode = 'local';
       hasSelectedMultiplayer = false;
+      showLobbyOnWaiting = false;
       capturePrefsFromInputs();
       setModeOverlayState('hidden');
       openPlayerConfigMenu();
@@ -623,6 +707,7 @@ function initModeOverlay() {
       localReady = false;
       setPrefInputsDisabled(false);
       capturePrefsFromInputs();
+      showLobbyOnWaiting = true;
       setModeOverlayState('lobby');
       updateLobbyRoleUi();
       updateMpStatus('Multiplayer selected - create or join a room');
@@ -658,6 +743,7 @@ async function startHost(roomId) {
   renderRoster(window.gameState.players);
   updateLobbyRoleUi();
   updateLobbyUi();
+  showLobbyOnWaiting = true;
   setModeOverlayState('lobby');
 
   roomClient.listenPlayers((players) => {
@@ -680,14 +766,14 @@ async function startHost(roomId) {
 
   const callbacks = {
     onWinner: (player) => {
-      roomClient.updateMeta({ status: 'waiting', finishedAt: Date.now() });
-      setModeOverlayState('lobby');
-      showWinnerOverlay(player, () => forceReset(window.gameState));
+      const result = createResultPayload('win', { player: { id: player.id, name: player.name, color: player.color } });
+      roomClient.updateMeta({ status: 'waiting', finishedAt: Date.now(), lastResult: result });
+      showMatchResult(result);
     },
     onDraw: () => {
-      roomClient.updateMeta({ status: 'waiting', finishedAt: Date.now() });
-      setModeOverlayState('lobby');
-      showDrawOverlay(() => forceReset(window.gameState));
+      const result = createResultPayload('draw');
+      roomClient.updateMeta({ status: 'waiting', finishedAt: Date.now(), lastResult: result });
+      showMatchResult(result);
     },
     publishState: (state) => {
       const payload = {
@@ -741,6 +827,7 @@ async function startGuest(roomId) {
   renderRoster(window.gameState.players);
   updateLobbyRoleUi();
   updateLobbyUi();
+  showLobbyOnWaiting = true;
   setModeOverlayState('lobby');
 
   roomClient.listenPlayers((players) => {
@@ -881,8 +968,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Start the fixed-timestep game loop (local only by default)
 startLoopWithCallbacks({
-  onWinner: (player) => showWinnerOverlay(player, () => forceReset(window.gameState)),
-  onDraw: () => showDrawOverlay(() => forceReset(window.gameState))
+  onWinner: (player) => {
+    const result = createResultPayload('win', { player: { id: player.id, name: player.name, color: player.color } });
+    showMatchResult(result);
+  },
+  onDraw: () => {
+    const result = createResultPayload('draw');
+    showMatchResult(result);
+  }
 });
 
 // Expose lightweight Firebase hooks for POC usage in console/experiments.

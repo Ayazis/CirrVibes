@@ -15,7 +15,7 @@ function ensureWinnerStyles() {
   document.head.appendChild(s);
 }
 
-export function showWinnerOverlay(player, onPlayAgain) {
+export function showWinnerOverlay(player, onPlayAgain, options = {}) {
   try {
     ensureWinnerStyles();
     const existing = document.getElementById('winnerOverlay');
@@ -39,16 +39,27 @@ export function showWinnerOverlay(player, onPlayAgain) {
     sw.style.background = `rgb(${r}, ${g}, ${b})`;
 
     const btn = document.createElement('button');
-    btn.textContent = 'Play Again';
-    btn.addEventListener('click', () => {
-      try { document.body.removeChild(overlay); } catch (e) {}
-      if (typeof onPlayAgain === 'function') onPlayAgain();
-    });
+    const disablePlayAgain = !!options.disablePlayAgain;
+    const disabledMessage = options.disabledMessage || 'Waiting for host';
+    btn.textContent = disablePlayAgain ? 'Waiting...' : 'Play Again';
+    btn.disabled = disablePlayAgain;
+    if (!disablePlayAgain) {
+      btn.addEventListener('click', () => {
+        try { document.body.removeChild(overlay); } catch (e) {}
+        if (typeof onPlayAgain === 'function') onPlayAgain();
+      });
+    }
 
     box.appendChild(title);
     box.appendChild(name);
     box.appendChild(sw);
     box.appendChild(btn);
+    if (disablePlayAgain) {
+      const note = document.createElement('p');
+      note.className = 'muted';
+      note.textContent = disabledMessage;
+      box.appendChild(note);
+    }
     overlay.appendChild(box);
     document.body.appendChild(overlay);
   } catch (e) {
@@ -56,7 +67,7 @@ export function showWinnerOverlay(player, onPlayAgain) {
   }
 }
 
-export function showDrawOverlay(onPlayAgain) {
+export function showDrawOverlay(onPlayAgain, options = {}) {
   try {
     ensureWinnerStyles();
     const existing = document.getElementById('winnerOverlay');
@@ -70,11 +81,25 @@ export function showDrawOverlay(onPlayAgain) {
     const msg = document.createElement('p');
     msg.textContent = 'All players eliminated.';
     const btn = document.createElement('button');
-    btn.textContent = 'Play Again';
-    btn.addEventListener('click', () => { try { document.body.removeChild(overlay); } catch (e) {} if (typeof onPlayAgain === 'function') onPlayAgain(); });
+    const disablePlayAgain = !!options.disablePlayAgain;
+    const disabledMessage = options.disabledMessage || 'Waiting for host';
+    btn.textContent = disablePlayAgain ? 'Waiting...' : 'Play Again';
+    btn.disabled = disablePlayAgain;
+    if (!disablePlayAgain) {
+      btn.addEventListener('click', () => {
+        try { document.body.removeChild(overlay); } catch (e) {}
+        if (typeof onPlayAgain === 'function') onPlayAgain();
+      });
+    }
     box.appendChild(title);
     box.appendChild(msg);
     box.appendChild(btn);
+    if (disablePlayAgain) {
+      const note = document.createElement('p');
+      note.className = 'muted';
+      note.textContent = disabledMessage;
+      box.appendChild(note);
+    }
     overlay.appendChild(box);
     document.body.appendChild(overlay);
   } catch (e) {
