@@ -27,7 +27,8 @@ export class RoomClient {
       controls: this.playerInfo.controls || '',
       joinedAt: now,
       isHost: this.isHost,
-      lastSeen: now
+      lastSeen: now,
+      ready: false
     };
 
     if (this.isHost) {
@@ -93,6 +94,17 @@ export class RoomClient {
   async updateMeta(patch) {
     const ref = roomRef(this.roomId, 'meta');
     return updateValue(ref, patch);
+  }
+
+  async updateSelf(patch) {
+    if (!patch) return;
+    if (!this._synced) await this.joinRoom();
+    const ref = roomRef(this.roomId, `players/${this.playerId}`);
+    return updateValue(ref, patch);
+  }
+
+  async setReady(isReady) {
+    return this.updateSelf({ ready: !!isReady, readyAt: Date.now() });
   }
 
   async leaveRoom() {

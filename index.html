@@ -25,11 +25,13 @@
 
   <div class="mode-overlay" id="modeOverlay">
     <div class="mode-card">
-      <h3>Select mode</h3>
-      <p>Play locally or online via Firebase.</p>
-      <div class="actions">
-        <button id="selectLocal" class="primary">Local</button>
-        <button id="selectMp">Multiplayer</button>
+      <div id="modeSelectBlock">
+        <h3>Select mode</h3>
+        <p>Play locally or online via Firebase.</p>
+        <div class="actions">
+          <button id="selectLocal" class="primary">Local</button>
+          <button id="selectMp">Multiplayer</button>
+        </div>
       </div>
       <div id="mpConfig" style="display:none;">
         <p style="margin:6px 0;">Enter your prefs and create or join a room.</p>
@@ -49,17 +51,19 @@
         </div>
         <div class="multiplayer-panel" style="margin-top:10px;">
           <label>Room ID</label>
-          <input id="roomIdInput" placeholder="room-xxxxxx" />
-        <div class="actions">
-          <button id="createRoomBtn">Create</button>
-          <button id="joinRoomBtn">Join</button>
+          <div class="room-row">
+            <input id="roomIdInput" placeholder="room-xxxxxx" />
+            <button id="createRoomBtn">Create</button>
+            <button id="joinRoomBtn">Join</button>
+          </div>
+          <small id="mpStatus">Offline</small>
+          <small id="mpLatency">Latency: --</small>
+          <small id="mpRoomInfo">Room: --</small>
         </div>
-        <small id="mpStatus">Offline</small>
-        <small id="mpLatency">Latency: --</small>
-        <small id="mpRoomInfo">Room: --</small>
-      </div>
-        <div class="actions" style="justify-content:flex-end;">
-          <button id="mpReadyBtn" class="primary">Ready</button>
+        <div id="mpPlayerList" class="mp-player-list"></div>
+        <div class="actions lobby-actions">
+          <button id="mpReadyBtn" class="primary" disabled>Ready Up</button>
+          <button id="mpStartBtn" class="primary" disabled style="display:none;">Start Game</button>
         </div>
       </div>
     </div>

@@ -1,5 +1,4 @@
 import { initGame } from './src/initGame.js';
-import { loadFirstStartDone } from './src/persistence.js';
 import { openPlayerConfigMenu, showWinnerOverlay, showDrawOverlay } from './src/ui/overlays.js';
 import { updateControlsInfoUI as renderControlsInfo } from './src/ui/controlsInfo.js';
 import { attachInputHandlers } from './src/input.js';
@@ -19,15 +18,13 @@ let loopController = null;
 let pendingPrefs = null;
 let capturePrefs = null;
 let detachInput = null;
+let lobbyPlayers = {};
+let lobbyMeta = {};
+let localReady = false;
+let hasSelectedMultiplayer = false;
+let prefInputs = [];
 
-// Open the player config on initial page load only when the user hasn't completed first-start.
-// This avoids reopening the overlay after Save & Reload.
-document.addEventListener('DOMContentLoaded', () => {
-  try {
-    const done = loadFirstStartDone();
-    if (done !== 'true') openPlayerConfigMenu();
-  } catch (e) {}
-});
+const MIN_MULTIPLAYER_PLAYERS = 2;
 
 // Wire up the player selection button in the main UI
 document.addEventListener('DOMContentLoaded', () => {
@@ -105,6 +102,195 @@ function updateMpError(text) {
   console.error('[multiplayer]', text);
 }
 
+function setPrefInputsDisabled(disabled) {
+  prefInputs.forEach((input) => {
+    if (input) input.disabled = !!disabled;
+  });
+}
+
+function capturePrefsFromInputs() {
+  if (!capturePrefs) return pendingPrefs;
+  pendingPrefs = capturePrefs();
+  applyLocalPrefs();
+  return pendingPrefs;
+}
+
+async function syncRoomProfileFromPrefs() {
+  if (!roomClient || !pendingPrefs) return;
+  try {
+    await roomClient.updateSelf({
+      name: pendingPrefs.name,
+      color: pendingPrefs.color,
+      controls: pendingPrefs.controls
+    });
+  } catch (e) {
+    console.warn('syncRoomProfileFromPrefs failed', e);
+  }
+}
+
+function setModeOverlayState(mode) {
+  const overlay = document.getElementById('modeOverlay');
+  const selectBlock = document.getElementById('modeSelectBlock');
+  const mpConfig = document.getElementById('mpConfig');
+  if (!overlay) return;
+  if (mode === 'hidden') {
+    overlay.style.display = 'none';
+    return;
+  }
+  overlay.style.display = 'flex';
+  if (selectBlock) selectBlock.style.display = mode === 'select' ? 'block' : 'none';
+  if (mpConfig) mpConfig.style.display = mode === 'lobby' ? 'block' : 'none';
+}
+
+function renderLobbyPlayers(players) {
+  const listEl = document.getElementById('mpPlayerList');
+  if (!listEl) return;
+  const entries = Object.values(players || {}).sort((a, b) => (a?.joinedAt || 0) - (b?.joinedAt || 0));
+  if (!entries.length) {
+    listEl.innerHTML = '<div class="muted-text">No players connected</div>';
+    return;
+  }
+  const rows = entries.map((p) => {
+    const color = cssFromColor(rgbaFromHex(p?.color || '#888888'));
+    const name = escapeHtml(p?.name || p?.id || 'Player');
+    const ready = !!p?.ready;
+    const badgeClass = ready ? 'yes' : 'no';
+    const label = ready ? 'Ready' : 'Not ready';
+    return `<div class="mp-player"><div class="player-info"><span class="swatch" style="background:${color};"></span><span>${name}</span></div><span class="ready badge ${badgeClass}">${label}</span></div>`;
+  }).join('');
+  listEl.innerHTML = rows;
+}
+
+function lobbyCounts() {
+  const players = Object.values(lobbyPlayers || {});
+  const total = players.length;
+  const ready = players.filter((p) => p && p.ready).length;
+  return { total, ready };
+}
+
+function updateLobbyRoleUi() {
+  const readyBtn = document.getElementById('mpReadyBtn');
+  const startBtn = document.getElementById('mpStartBtn');
+  if (!readyBtn || !startBtn) return;
+  if (mpMode === 'host') {
+    readyBtn.style.display = 'inline-flex';
+    startBtn.style.display = 'inline-flex';
+  } else if (mpMode === 'guest') {
+    readyBtn.style.display = 'inline-flex';
+    startBtn.style.display = 'none';
+  } else {
+    readyBtn.style.display = 'inline-flex';
+    startBtn.style.display = 'none';
+    readyBtn.disabled = true;
+  }
+}
+
+function updateLobbyUi() {
+  const readyBtn = document.getElementById('mpReadyBtn');
+  const startBtn = document.getElementById('mpStartBtn');
+  const status = lobbyMeta?.status || 'waiting';
+  const { total, ready } = lobbyCounts();
+  const statusText = total ? `Players ready: ${ready}/${total}` : 'Waiting for players...';
+  if (roomClient && (mpMode === 'host' || mpMode === 'guest')) {
+    updateMpStatus(statusText);
+  }
+  if (readyBtn) {
+    readyBtn.textContent = localReady ? 'Unready' : 'Ready Up';
+    readyBtn.disabled = !roomClient || ((mpMode !== 'guest' && mpMode !== 'host')) || status === 'running';
+  }
+  if (startBtn) {
+    const canStart = mpMode === 'host' && status !== 'running' && total >= MIN_MULTIPLAYER_PLAYERS && ready === total;
+    startBtn.disabled = !canStart;
+  }
+}
+
+function areAllPlayersReady() {
+  const { total, ready } = lobbyCounts();
+  if (total < MIN_MULTIPLAYER_PLAYERS) return false;
+  return total > 0 && ready === total;
+}
+
+async function setLocalReadyState(nextReady) {
+  if (!roomClient) return;
+  const prev = localReady;
+  localReady = nextReady;
+  const shouldLock = nextReady && (mpMode === 'host' || mpMode === 'guest');
+  if (shouldLock) {
+    setPrefInputsDisabled(true);
+  } else if (!nextReady) {
+    setPrefInputsDisabled(false);
+  }
+  updateLobbyUi();
+  try {
+    await roomClient.setReady(nextReady);
+  } catch (e) {
+    localReady = prev;
+    if (prev && (mpMode === 'host' || mpMode === 'guest')) {
+      setPrefInputsDisabled(true);
+    } else if (!prev) {
+      setPrefInputsDisabled(false);
+    }
+    updateLobbyUi();
+    updateMpError(`Ready update failed: ${e?.message || e}`);
+  }
+}
+
+async function beginHostedMatch() {
+  if (!roomClient || mpMode !== 'host') return;
+  if (!areAllPlayersReady()) return;
+  if (!window.gameState) return;
+  updateMpStatus('Starting match...');
+  forceReset(window.gameState);
+  window.gameState.paused = false;
+  const startTs = Date.now();
+  lobbyMeta = { ...(lobbyMeta || {}), status: 'running', startedAt: startTs };
+  updateLobbyUi();
+  setModeOverlayState('hidden');
+  try {
+    await roomClient.updateMeta({ status: 'running', startedAt: startTs });
+  } catch (e) {
+    updateMpError(`Failed to start match: ${e?.message || e}`);
+  }
+}
+
+function handlePlayersUpdate(players) {
+  lobbyPlayers = players || {};
+  renderLobbyPlayers(lobbyPlayers);
+  if (mpMode === 'host' || mpMode === 'guest') assignRemotePlayers(lobbyPlayers);
+  updateLobbyUi();
+}
+
+function handleMetaChange(meta = {}) {
+  lobbyMeta = meta || {};
+  const status = lobbyMeta.status || 'waiting';
+  if (!hasSelectedMultiplayer) return;
+  if (status === 'running') {
+    setModeOverlayState('hidden');
+  } else if (mpMode === 'host' || mpMode === 'guest') {
+    setModeOverlayState('lobby');
+  }
+  updateLobbyUi();
+}
+
+async function cleanupRoomClient() {
+  if (!roomClient) return;
+  try { await roomClient.leaveRoom(); } catch (e) {}
+  roomClient = null;
+}
+
+function resetLobbyState() {
+  lobbyPlayers = {};
+  lobbyMeta = {};
+  localReady = false;
+  mpMode = mpMode === 'local' ? 'local' : null;
+  setPrefInputsDisabled(false);
+  renderLobbyPlayers(lobbyPlayers);
+  updateLobbyUi();
+  updateLatency(null);
+  updateRoomInfo(null);
+  updateMpStatus('Offline');
+}
+
 function getPlayerInfo() {
   const players = window.gameState?.players || [];
   const p1 = players[0] || {};
@@ -127,6 +313,12 @@ function cssFromColor(arrOrHex) {
     return `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
   }
   return '#cccccc';
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text == null ? '' : String(text);
+  return div.innerHTML;
 }
 
 function visiblePlayers(players) {
@@ -278,15 +470,14 @@ function assignRemotePlayers(remotePlayers) {
   rebuildOccupancy();
   updateControls(window.gameState.players);
   renderRoster(window.gameState.players);
-  updateMpStatus(`Players: ${Math.min(slot, window.gameState.players.length)} / ${window.gameState.players.length}`);
+  if (mpMode !== 'host' && mpMode !== 'guest') {
+    updateMpStatus(`Players: ${Math.min(slot, window.gameState.players.length)} / ${window.gameState.players.length}`);
+  }
 }
 
 function initModeOverlay() {
-  const overlay = document.getElementById('modeOverlay');
-  const mpConfig = document.getElementById('mpConfig');
   const selectLocal = document.getElementById('selectLocal');
   const selectMp = document.getElementById('selectMp');
-  const readyBtn = document.getElementById('mpReadyBtn');
   const nameInput = document.getElementById('prefName');
   const colorInput = document.getElementById('prefColor');
   const controlsInput = document.getElementById('prefControls');
@@ -297,47 +488,56 @@ function initModeOverlay() {
     controls: (controlsInput && controlsInput.value) || 'ArrowLeft / ArrowRight'
   });
 
+  prefInputs = [nameInput, colorInput, controlsInput].filter(Boolean);
+  setPrefInputsDisabled(false);
+  const handlePrefInput = () => {
+    if (localReady && (mpMode === 'host' || mpMode === 'guest')) return;
+    capturePrefsFromInputs();
+    syncRoomProfileFromPrefs();
+  };
+  if (nameInput) nameInput.addEventListener('input', handlePrefInput);
+  if (colorInput) colorInput.addEventListener('change', handlePrefInput);
+  if (controlsInput) controlsInput.addEventListener('change', handlePrefInput);
+
+  setModeOverlayState('select');
+  renderLobbyPlayers(lobbyPlayers);
+  updateLobbyRoleUi();
+  updateLobbyUi();
+
   if (selectLocal) {
-    selectLocal.addEventListener('click', () => {
+    selectLocal.addEventListener('click', async () => {
+      await cleanupRoomClient();
+      resetLobbyState();
       mpMode = 'local';
-      pendingPrefs = capturePrefs();
-      applyLocalPrefs();
-      if (mpConfig) mpConfig.style.display = 'none';
-      if (overlay) overlay.style.display = 'none';
+      hasSelectedMultiplayer = false;
+      capturePrefsFromInputs();
+      setModeOverlayState('hidden');
+      openPlayerConfigMenu();
       updateMpStatus('Local mode');
       updateRoomInfo(null);
+      localReady = false;
+      setPrefInputsDisabled(false);
+      updateLobbyRoleUi();
     });
   }
 
   if (selectMp) {
     selectMp.addEventListener('click', () => {
+      hasSelectedMultiplayer = true;
       pruneToLocalOnly();
-      if (mpConfig) mpConfig.style.display = 'block';
-      if (selectLocal) selectLocal.style.display = 'none';
-      if (selectMp) selectMp.style.display = 'none';
-      const question = overlay?.querySelector('h3');
-      const subtitle = overlay?.querySelector('p');
-      if (question) question.style.display = 'none';
-      if (subtitle) subtitle.style.display = 'none';
-      updateMpStatus('Multiplayer selected - set prefs');
-    });
-  }
-
-  if (readyBtn) {
-    readyBtn.addEventListener('click', () => {
-      pendingPrefs = capturePrefs();
-      applyLocalPrefs();
-      deactivateInactiveSlots();
-      updateControls(window.gameState.players);
-      renderRoster(window.gameState.players);
-      if (overlay) overlay.style.display = 'none';
-      updateMpStatus('Ready - create or join a room');
+      localReady = false;
+      setPrefInputsDisabled(false);
+      capturePrefsFromInputs();
+      setModeOverlayState('lobby');
+      updateLobbyRoleUi();
+      updateMpStatus('Multiplayer selected - create or join a room');
     });
   }
 }
 
 async function startHost(roomId) {
   mpMode = 'host';
+  hasSelectedMultiplayer = true;
   pruneToLocalOnly();
   applyLocalPrefs();
   const info = pendingPrefs || getPlayerInfo();
@@ -354,12 +554,23 @@ async function startHost(roomId) {
   if (window.gameState?.players?.[0]) {
     window.gameState.players[0].clientId = roomClient.playerId;
   }
+  if (window.gameState) window.gameState.paused = true;
+  localReady = false;
+  setPrefInputsDisabled(false);
+  try { await roomClient.setReady(false); } catch (e) {}
   deactivateInactiveSlots();
   updateControls(window.gameState.players);
   renderRoster(window.gameState.players);
+  updateLobbyRoleUi();
+  updateLobbyUi();
+  setModeOverlayState('lobby');
 
   roomClient.listenPlayers((players) => {
-    assignRemotePlayers(players);
+    handlePlayersUpdate(players);
+  });
+
+  roomClient.listenMeta((meta) => {
+    handleMetaChange(meta || {});
   });
 
   roomClient.listenInputs((inputs) => {
@@ -373,8 +584,16 @@ async function startHost(roomId) {
   });
 
   const callbacks = {
-    onWinner: (player) => showWinnerOverlay(player, () => forceReset(window.gameState)),
-    onDraw: () => showDrawOverlay(() => forceReset(window.gameState)),
+    onWinner: (player) => {
+      roomClient.updateMeta({ status: 'waiting', finishedAt: Date.now() });
+      setModeOverlayState('lobby');
+      showWinnerOverlay(player, () => forceReset(window.gameState));
+    },
+    onDraw: () => {
+      roomClient.updateMeta({ status: 'waiting', finishedAt: Date.now() });
+      setModeOverlayState('lobby');
+      showDrawOverlay(() => forceReset(window.gameState));
+    },
     publishState: (state) => {
       const payload = {
         frame: state.frameCounter,
@@ -400,6 +619,7 @@ async function startHost(roomId) {
 
 async function startGuest(roomId) {
   mpMode = 'guest';
+  hasSelectedMultiplayer = true;
   pruneToLocalOnly();
   applyLocalPrefs();
   const info = pendingPrefs || getPlayerInfo();
@@ -417,12 +637,22 @@ async function startGuest(roomId) {
     window.gameState.players[0].clientId = roomClient.playerId;
   }
   if (window.gameState) window.gameState.paused = true;
+  localReady = false;
+  setPrefInputsDisabled(false);
+  try { await roomClient.setReady(false); } catch (e) {}
   deactivateInactiveSlots();
   updateControls(window.gameState.players);
   renderRoster(window.gameState.players);
+  updateLobbyRoleUi();
+  updateLobbyUi();
+  setModeOverlayState('lobby');
 
   roomClient.listenPlayers((players) => {
-    assignRemotePlayers(players);
+    handlePlayersUpdate(players);
+  });
+
+  roomClient.listenMeta((meta) => {
+    handleMetaChange(meta || {});
   });
 
   roomClient.listenState((state) => {
@@ -467,25 +697,61 @@ function wireMultiplayerUI() {
   const createBtn = document.getElementById('createRoomBtn');
   const joinBtn = document.getElementById('joinRoomBtn');
   const input = document.getElementById('roomIdInput');
+  const readyBtn = document.getElementById('mpReadyBtn');
+  const startBtn = document.getElementById('mpStartBtn');
   if (!createBtn || !joinBtn || !input) return;
   const ensurePrefs = () => {
-    if (!pendingPrefs && capturePrefs) pendingPrefs = capturePrefs();
-    applyLocalPrefs();
+    capturePrefsFromInputs();
   };
 
   createBtn.addEventListener('click', async () => {
     const newId = createRoomId();
     input.value = newId;
     ensurePrefs();
+    await cleanupRoomClient();
+    resetLobbyState();
     await startHost(newId);
+    updateLobbyRoleUi();
   });
 
   joinBtn.addEventListener('click', async () => {
     const roomId = input.value.trim();
     if (!roomId) return;
     ensurePrefs();
+    await cleanupRoomClient();
+    resetLobbyState();
     await startGuest(roomId);
+    updateLobbyRoleUi();
   });
+
+  if (readyBtn) {
+    readyBtn.addEventListener('click', async () => {
+      if (!roomClient || (mpMode !== 'guest' && mpMode !== 'host')) return;
+      if ((lobbyMeta?.status || 'waiting') === 'running') return;
+      readyBtn.disabled = true;
+      const next = !localReady;
+      try {
+        if (next) {
+          capturePrefsFromInputs();
+          await syncRoomProfileFromPrefs();
+        } else {
+          setPrefInputsDisabled(false);
+        }
+        await setLocalReadyState(next);
+        updateLobbyUi();
+      } catch (e) {
+        updateMpError(`Ready toggle failed: ${e?.message || e}`);
+      } finally {
+        readyBtn.disabled = false;
+      }
+    });
+  }
+
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+      beginHostedMatch();
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
