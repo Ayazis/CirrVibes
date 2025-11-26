@@ -114,6 +114,16 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     };
   }
 
+  function createResultPlayerPayload(player = {}) {
+    if (!player) return null;
+    return {
+      id: player.id ?? null,
+      clientId: player.clientId ?? null,
+      name: player.name ?? null,
+      color: normalizeColorPayload(player.color)
+    };
+  }
+
   function showMatchResult(result) {
     if (!result || !gameState) return;
     if (result.key) state.lastResultShownKey = result.key;
@@ -598,7 +608,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
     const callbacks = {
       onWinner: (player) => {
-        const result = createResultPayload('win', { player: { id: player.id, name: player.name, color: player.color } });
+        const result = createResultPayload('win', { player: createResultPlayerPayload(player) });
         firebaseSession.updateMeta({ status: 'waiting', finishedAt: Date.now(), lastResult: result });
         showMatchResult(result);
       },
@@ -742,7 +752,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function startLocalLoop() {
     startLoopWithCallbacks({
       onWinner: (player) => {
-        const result = createResultPayload('win', { player: { id: player.id, name: player.name, color: player.color } });
+        const result = createResultPayload('win', { player: createResultPlayerPayload(player) });
         showMatchResult(result);
       },
       onDraw: () => {
