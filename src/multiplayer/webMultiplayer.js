@@ -1,9 +1,23 @@
 import { openPlayerConfigMenu, showDrawOverlay, showWinnerOverlay } from '../ui/overlays.js';
 import { startFixedStepLoop, resetGame as resetGameState, forceReset as forceResetState } from '../gameLoop.js';
 import { cssFromColor, normalizeColorPayload, rgbaFromHex } from './colorUtils.js';
+import { PLAYER_COLORS, normalizeColorHex, getAvailableColor } from './playerColors.js';
 import { createFirebaseSession } from './firebaseSession.js';
 
 const MIN_MULTIPLAYER_PLAYERS = 2;
+const DUMMY_NAMES = [
+  'NeonNova',
+  'TurboTrail',
+  'PhotonFox',
+  'CosmoComet',
+  'PlasmaPulse',
+  'OrbitOtter',
+  'LazerLynx',
+  'VectorViper',
+  'QuasarQuokka',
+  'StellarSpark'
+];
+const NAME_SUFFIX_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 export function createWebMultiplayer({ gameState, localRuntime }) {
   const firebaseSession = createFirebaseSession();
@@ -21,8 +35,94 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     hasSelectedMultiplayer: false,
     lastAppliedSpawnKey: null,
     showLobbyOnWaiting: false,
-    lastResultShownKey: null
+    lastResultShownKey: null,
+    dummyNameCursor: Math.floor(Math.random() * DUMMY_NAMES.length)
   };
+
+  function randomNameSuffix(length = 2) {
+    let out = '';
+    for (let i = 0; i < length; i += 1) {
+      const idx = Math.floor(Math.random() * NAME_SUFFIX_CHARS.length);
+      out += NAME_SUFFIX_CHARS[idx];
+    }
+    return out;
+  }
+
+  function nextDummyName() {
+    const idx = state.dummyNameCursor % DUMMY_NAMES.length;
+    const name = DUMMY_NAMES[idx];
+    state.dummyNameCursor = (state.dummyNameCursor + 1) % DUMMY_NAMES.length;
+    return `${name}-${randomNameSuffix(2)}`;
+  }
+
+  function hexFromColorPayload(color) {
+    if (typeof color === 'string') {
+      return normalizeColorHex(color) || PLAYER_COLORS[0];
+    }
+    if (Array.isArray(color) && color.length >= 3) {
+      const toHex = (value) => Math.round(Math.min(Math.max(value, 0), 1) * 255).toString(16).padStart(2, '0');
+      return `#${toHex(color[0] || 0)}${toHex(color[1] || 0)}${toHex(color[2] || 0)}`;
+    }
+    return PLAYER_COLORS[0];
+  }
+
+  function buildUsedColorSet(excludePlayerId = null) {
+    const used = new Set();
+    Object.values(state.lobbyPlayers || {}).forEach((player) => {
+      if (!player || !player.color) return;
+      if (excludePlayerId && player.id === excludePlayerId) return;
+      const normalized = normalizeColorHex(player.color);
+      if (normalized) used.add(normalized);
+    });
+    return used;
+  }
+
+  function updateColorDisplay(color) {
+    const normalized = normalizeColorHex(color);
+    const swatch = document.getElementById('prefColorSwatch');
+    const valueEl = document.getElementById('prefColorValue');
+    const fallback = '#444444';
+    if (swatch) swatch.style.background = normalized || fallback;
+    if (valueEl) valueEl.textContent = normalized ? normalized.toUpperCase() : '--';
+  }
+
+  function setColorValue(color, { notify = true, force = false } = {}) {
+    const normalized = normalizeColorHex(color) || PLAYER_COLORS[0];
+    const colorInput = document.getElementById('prefColor');
+    if (colorInput) colorInput.value = normalized;
+    updateColorDisplay(normalized);
+    if (notify) {
+      syncPrefsFromInputs({ force });
+    }
+  }
+
+  function syncLocalColorFromLobby() {
+    const localId = firebaseSession.getPlayerId();
+    if (!localId) return false;
+    const byId = (state.lobbyPlayers || {})[localId];
+    const match = byId || Object.values(state.lobbyPlayers || {}).find((player) => player?.id === localId);
+    const serverColor = normalizeColorHex(match?.color);
+    if (!serverColor) return false;
+    const colorInput = document.getElementById('prefColor');
+    const current = colorInput ? normalizeColorHex(colorInput.value) : null;
+    if (current === serverColor) return false;
+    setColorValue(serverColor, { notify: true, force: true });
+    return true;
+  }
+
+  function enforceAvailableColorSelection(options = {}) {
+    const colorInput = document.getElementById('prefColor');
+    if (!colorInput) return;
+    const localId = firebaseSession.getPlayerId();
+    const used = buildUsedColorSet(localId);
+    const current = normalizeColorHex(colorInput.value);
+    const next = getAvailableColor(current, used);
+    if (!current || next !== current) {
+      setColorValue(next, { notify: options.notify !== false, force: !!options.force });
+    } else {
+      updateColorDisplay(current);
+    }
+  }
 
   function syncContext() {
     localRuntime.setContext({
@@ -149,8 +249,9 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   }
 
   function setPrefInputsDisabled(disabled) {
+    const flag = !!disabled;
     state.prefInputs.forEach((input) => {
-      if (input) input.disabled = !!disabled;
+      if (input) input.disabled = flag;
     });
   }
 
@@ -169,6 +270,15 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     localRuntime.applyLocalPrefs(state.pendingPrefs);
     rebindInputHandlers();
     return state.pendingPrefs;
+  }
+
+  function syncPrefsFromInputs(options = {}) {
+    const force = !!options.force;
+    if (!force && state.localReady && (state.mpMode === 'host' || state.mpMode === 'guest')) {
+      return;
+    }
+    applyLocalPrefsFromInputs();
+    syncRoomProfileFromPrefs();
   }
 
   function updatePrimaryActionsVisibility() {
@@ -378,6 +488,8 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       updateMpStatus(`Players: ${Math.min(assignedSlots, total)} / ${total}`);
     }
     updateLobbyUi();
+    syncLocalColorFromLobby();
+    enforceAvailableColorSelection({ force: true });
   }
 
   function handleMetaChange(meta = {}) {
@@ -484,6 +596,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     state.showLobbyOnWaiting = false;
     clearResultState();
     renderLobbyPlayers(state.lobbyPlayers);
+    enforceAvailableColorSelection({ notify: false });
     updateLobbyUi();
     updateLatency(null);
     updateRoomInfo(null);
@@ -497,7 +610,11 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function getPlayerInfo() {
     const players = gameState?.players || [];
     const p1 = players[0] || {};
-    return { name: p1.name || 'Player', color: '#ff6666', controls: p1.controls || '' };
+    return {
+      name: p1.name || nextDummyName(),
+      color: hexFromColorPayload(p1.color),
+      controls: p1.controls || 'ArrowLeft / ArrowRight'
+    };
   }
 
   function escapeHtml(text) {
@@ -513,22 +630,34 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const colorInput = document.getElementById('prefColor');
     const controlsInput = document.getElementById('prefControls');
 
+    const ensureDummyNameSeed = () => {
+      if (!nameInput) return nextDummyName();
+      const trimmed = nameInput.value.trim();
+      if (trimmed) return trimmed;
+      const generated = nextDummyName();
+      nameInput.value = generated;
+      return generated;
+    };
+
     state.capturePrefs = () => ({
-      name: (nameInput && nameInput.value) || 'Player',
-      color: (colorInput && colorInput.value) || '#66ccff',
+      name: ensureDummyNameSeed(),
+      color: normalizeColorHex(colorInput && colorInput.value) || PLAYER_COLORS[0],
       controls: (controlsInput && controlsInput.value) || 'ArrowLeft / ArrowRight'
     });
 
-    state.prefInputs = [nameInput, colorInput, controlsInput].filter(Boolean);
+    state.prefInputs = [nameInput, controlsInput].filter(Boolean);
     setPrefInputsDisabled(false);
+    ensureDummyNameSeed();
+    enforceAvailableColorSelection({ notify: false });
+
     const handlePrefInput = () => {
-      if (state.localReady && (state.mpMode === 'host' || state.mpMode === 'guest')) return;
-      applyLocalPrefsFromInputs();
-      syncRoomProfileFromPrefs();
+      syncPrefsFromInputs();
     };
+
     if (nameInput) nameInput.addEventListener('input', handlePrefInput);
-    if (colorInput) colorInput.addEventListener('change', handlePrefInput);
     if (controlsInput) controlsInput.addEventListener('change', handlePrefInput);
+
+    syncPrefsFromInputs();
 
     setModeOverlayState('select');
     renderLobbyPlayers(state.lobbyPlayers);

@@ -1,8 +1,42 @@
 // Host/guest helper for Firebase-backed multiplayer POC.
-import { initFirebase, roomRef, listen, setValue, updateValue, writePresenceCleanup, nowTs, removeValue } from './firebaseClient.js';
+import { initFirebase, roomRef, listen, setValue, updateValue, writePresenceCleanup, nowTs, removeValue, runDbTransaction, writeColorAssignmentCleanup } from './firebaseClient.js';
+import { PLAYER_COLORS, getAvailableColor, normalizeColorHex } from './multiplayer/playerColors.js';
 
 function randomId(prefix = 'p') {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function reserveColor(roomId, playerId, preferredColor) {
+  let chosen = null;
+  try {
+    await runDbTransaction(roomRef(roomId, 'colorAssignments'), (assignments) => {
+      const next = assignments && typeof assignments === 'object' ? { ...assignments } : {};
+      delete next[playerId];
+      const used = new Set(Object.values(next || {}).map((color) => normalizeColorHex(color)).filter(Boolean));
+      chosen = getAvailableColor(preferredColor, used);
+      next[playerId] = chosen;
+      return next;
+    });
+  } catch (e) {
+    console.warn('[roomClient] color reservation failed', e);
+    chosen = null;
+  }
+  return chosen || normalizeColorHex(preferredColor) || PLAYER_COLORS[0];
+}
+
+async function releaseColor(roomId, playerId) {
+  try {
+    await runDbTransaction(roomRef(roomId, 'colorAssignments'), (assignments) => {
+      if (!assignments || typeof assignments !== 'object') return assignments;
+      const next = { ...assignments };
+      if (next[playerId]) {
+        delete next[playerId];
+      }
+      return next;
+    });
+  } catch (e) {
+    console.warn('[roomClient] color release failed', e);
+  }
 }
 
 export class RoomClient {
@@ -20,10 +54,12 @@ export class RoomClient {
 
   async joinRoom() {
     const now = Date.now();
+    const assignedColor = await reserveColor(this.roomId, this.playerId, this.playerInfo.color || '#ffffff');
+    this.playerInfo.color = assignedColor;
     const playerPayload = {
       id: this.playerId,
       name: this.playerInfo.name || this.playerId,
-      color: this.playerInfo.color || '#ffffff',
+      color: assignedColor,
       controls: this.playerInfo.controls || '',
       joinedAt: now,
       isHost: this.isHost,
@@ -44,6 +80,7 @@ export class RoomClient {
     const playerRef = roomRef(this.roomId, `players/${this.playerId}`);
     await setValue(playerRef, playerPayload);
     writePresenceCleanup(this.roomId, this.playerId);
+    writeColorAssignmentCleanup(this.roomId, this.playerId);
     this._synced = true;
   }
 
@@ -110,6 +147,7 @@ export class RoomClient {
     try {
       await removeValue(roomRef(this.roomId, `players/${this.playerId}`));
       await removeValue(roomRef(this.roomId, `inputs/${this.playerId}`));
+      await releaseColor(this.roomId, this.playerId);
     } catch (e) {
       // best effort
     }

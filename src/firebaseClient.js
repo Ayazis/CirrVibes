@@ -9,7 +9,9 @@ import {
   onValue,
   onDisconnect,
   serverTimestamp,
-  remove
+  remove,
+  get,
+  runTransaction
 } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
 
 // Config copied from firebase shizl.md
@@ -74,6 +76,23 @@ export function removeValue(refToRemove) {
   return remove(refToRemove);
 }
 
+export function getValue(refToGet) {
+  return get(refToGet).then((snapshot) => snapshot.val());
+}
+
+export function runDbTransaction(refToTransact, updater) {
+  return runTransaction(refToTransact, updater, { applyLocally: false });
+}
+
 export function nowTs() {
   return serverTimestamp();
+}
+
+export function writeColorAssignmentCleanup(roomId, playerId) {
+  try {
+    const colorRef = roomRef(roomId, `colorAssignments/${playerId}`);
+    onDisconnect(colorRef).remove();
+  } catch (e) {
+    // ignore
+  }
 }

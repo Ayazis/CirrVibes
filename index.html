@@ -36,8 +36,10 @@
       <div id="mpConfig" style="display:none;">
         <p style="margin:6px 0;">Enter your prefs and create or join a room.</p>
         <div class="prefs-form">
+          <div class="name-and-color">
           <label>Name <input id="prefName" placeholder="Player" /></label>
-          <label>Color <input id="prefColor" type="color" value="#66ccff" /></label>
+            <span id="prefColorSwatch" class="color-display-swatch"></span>        
+          </div>          
           <label>Controls
             <select id="prefControls">
               <option value="ArrowLeft / ArrowRight">ArrowLeft / ArrowRight</option>
