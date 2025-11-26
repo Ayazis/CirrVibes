@@ -7,6 +7,62 @@ const mouseState = {
   rightButton: false
 };
 
+function bindTouchControls(state, onInputChange) {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return null;
+  if (!window.gameCapabilities?.isTouch) return null;
+  const controlsEl = document.getElementById('touchControls');
+  if (!controlsEl) return null;
+  const buttons = Array.from(controlsEl.querySelectorAll('[data-dir]'));
+  if (!buttons.length) return null;
+  controlsEl.setAttribute('aria-hidden', 'false');
+  const playerIndex = 0;
+
+  const setTurnState = (dir, isActive) => {
+    const player = state.players?.[playerIndex];
+    if (!player || !player.isAlive) return;
+    if (dir === 'left') player.isTurningLeft = isActive;
+    else if (dir === 'right') player.isTurningRight = isActive;
+    if (onInputChange) onInputChange(playerIndex, { isTurningLeft: player.isTurningLeft, isTurningRight: player.isTurningRight });
+  };
+
+  const pointerDown = (event) => {
+    event.preventDefault();
+    const btn = event.currentTarget;
+    const dir = btn?.dataset?.dir;
+    if (!dir) return;
+    btn.classList.add('touch-active');
+    setTurnState(dir, true);
+  };
+
+  const pointerUp = (event) => {
+    event.preventDefault();
+    const btn = event.currentTarget;
+    const dir = btn?.dataset?.dir;
+    if (!dir) return;
+    btn.classList.remove('touch-active');
+    setTurnState(dir, false);
+  };
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('pointerdown', pointerDown);
+    btn.addEventListener('pointerup', pointerUp);
+    btn.addEventListener('pointerleave', pointerUp);
+    btn.addEventListener('pointercancel', pointerUp);
+  });
+
+  return () => {
+    buttons.forEach((btn) => {
+      btn.classList.remove('touch-active');
+      btn.removeEventListener('pointerdown', pointerDown);
+      btn.removeEventListener('pointerup', pointerUp);
+      btn.removeEventListener('pointerleave', pointerUp);
+      btn.removeEventListener('pointercancel', pointerUp);
+    });
+    setTurnState('left', false);
+    setTurnState('right', false);
+  };
+}
+
 export function buildInputMappings(players) {
   controlsMap.clear();
   mousePlayerIndex = null;
@@ -126,6 +182,7 @@ export function attachInputHandlers(options) {
   document.addEventListener('mousedown', mousedown);
   document.addEventListener('mouseup', mouseup);
   document.addEventListener('contextmenu', contextmenu);
+  const detachTouch = bindTouchControls(state, onInputChange);
 
   return () => {
     document.removeEventListener('keydown', keydown);
@@ -133,5 +190,8 @@ export function attachInputHandlers(options) {
     document.removeEventListener('mousedown', mousedown);
     document.removeEventListener('mouseup', mouseup);
     document.removeEventListener('contextmenu', contextmenu);
+    if (detachTouch) {
+      try { detachTouch(); } catch (e) {}
+    }
   };
 }

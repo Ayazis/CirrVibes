@@ -337,3 +337,49 @@ canvas {
   color: #ccc;
   font-size: 13px;
 }
+
+.touch-controls {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  gap: 12px;
+  z-index: 1100;
+}
+
+.touch-controls--visible {
+  display: flex;
+}
+
+.touch-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 32px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: none;
+  transition: transform 0.1s ease, background 0.1s ease;
+}
+
+.touch-btn:active,
+.touch-btn.touch-active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 640px) {
+  .touch-controls {
+    bottom: 16px;
+    gap: 8px;
+  }
+  .touch-btn {
+    width: 60px;
+    height: 60px;
+    font-size: 26px;
+  }
+}

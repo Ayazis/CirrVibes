@@ -3,9 +3,23 @@ import { openPlayerConfigMenu } from './src/ui/overlays.js';
 import { createInitialGameState } from './src/gameState.js';
 import { createMultiplayerRuntime } from './src/multiplayer/runtime.js';
 
+
+function detectTouchCapabilities() {
+  if (typeof window === 'undefined') return { isTouch: false };
+  const nav = window.navigator || {};
+  const touchPoints = nav.maxTouchPoints || nav.msMaxTouchPoints || 0;
+  const coarsePointer = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  const touchEvents = 'ontouchstart' in window;
+  return {
+    //isTouch: Boolean(touchPoints || coarsePointer || touchEvents)
+    isTouch: true
+  };
+}
+
 initGame();
 
 window.gameState = createInitialGameState();
+window.gameCapabilities = detectTouchCapabilities();
 
 const multiplayer = createMultiplayerRuntime({ gameState: window.gameState });
 multiplayer.boot();
@@ -24,5 +38,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.gameState) window.gameState.paused = false;
       multiplayer.setStatus('Running');
     });
+  }
+
+  if (window.gameCapabilities?.isTouch) {
+    const touchControls = document.getElementById('touchControls');
+    if (touchControls) {
+      touchControls.classList.add('touch-controls--visible');
+      touchControls.setAttribute('aria-hidden', 'false');
+    }
   }
 });
