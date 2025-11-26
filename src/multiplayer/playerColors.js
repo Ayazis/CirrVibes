@@ -18,17 +18,3 @@ export function normalizeColorHex(color) {
   if (!str) return null;
   return str.startsWith('#') ? str : `#${str}`;
 }
-
-export function getAvailableColor(preferred, usedSet = new Set()) {
-  const normalizedPreferred = normalizeColorHex(preferred);
-  if (normalizedPreferred && !usedSet.has(normalizedPreferred)) {
-    return normalizedPreferred;
-  }
-  for (const color of PLAYER_COLORS) {
-    const normalized = normalizeColorHex(color);
-    if (normalized && !usedSet.has(normalized)) {
-      return normalized;
-    }
-  }
-  return normalizedPreferred || PLAYER_COLORS[0];
-}

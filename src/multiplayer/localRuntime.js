@@ -147,7 +147,9 @@ export function createLocalRuntime({ gameState }) {
     const p = gameState.players[0];
     p.name = prefs.name || p.name;
     p.controls = prefs.controls || p.controls;
-    p.color = rgbaFromHex(prefs.color || '#66ccff');
+    if (prefs.color) {
+      p.color = Array.isArray(prefs.color) ? prefs.color : rgbaFromHex(prefs.color);
+    }
     updateControls();
     renderRoster();
   }

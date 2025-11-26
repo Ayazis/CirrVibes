@@ -1,7 +1,7 @@
 import { openPlayerConfigMenu, showDrawOverlay, showWinnerOverlay } from '../ui/overlays.js';
 import { startFixedStepLoop, resetGame as resetGameState, forceReset as forceResetState } from '../gameLoop.js';
 import { cssFromColor, normalizeColorPayload, rgbaFromHex } from './colorUtils.js';
-import { PLAYER_COLORS, normalizeColorHex, getAvailableColor } from './playerColors.js';
+import { normalizeColorHex } from './playerColors.js';
 import { createFirebaseSession } from './firebaseSession.js';
 
 const MIN_MULTIPLAYER_PLAYERS = 2;
@@ -36,7 +36,8 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     lastAppliedSpawnKey: null,
     showLobbyOnWaiting: false,
     lastResultShownKey: null,
-    dummyNameCursor: Math.floor(Math.random() * DUMMY_NAMES.length)
+    dummyNameCursor: Math.floor(Math.random() * DUMMY_NAMES.length),
+    localColorHex: null
   };
 
   function randomNameSuffix(length = 2) {
@@ -55,72 +56,24 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     return `${name}-${randomNameSuffix(2)}`;
   }
 
-  function hexFromColorPayload(color) {
-    if (typeof color === 'string') {
-      return normalizeColorHex(color) || PLAYER_COLORS[0];
-    }
-    if (Array.isArray(color) && color.length >= 3) {
-      const toHex = (value) => Math.round(Math.min(Math.max(value, 0), 1) * 255).toString(16).padStart(2, '0');
-      return `#${toHex(color[0] || 0)}${toHex(color[1] || 0)}${toHex(color[2] || 0)}`;
-    }
-    return PLAYER_COLORS[0];
-  }
-
-  function buildUsedColorSet(excludePlayerId = null) {
-    const used = new Set();
-    Object.values(state.lobbyPlayers || {}).forEach((player) => {
-      if (!player || !player.color) return;
-      if (excludePlayerId && player.id === excludePlayerId) return;
-      const normalized = normalizeColorHex(player.color);
-      if (normalized) used.add(normalized);
-    });
-    return used;
-  }
-
-  function updateColorDisplay(color) {
-    const normalized = normalizeColorHex(color);
+  function updateAssignedColorSwatch(color) {
     const swatch = document.getElementById('prefColorSwatch');
-    const valueEl = document.getElementById('prefColorValue');
     const fallback = '#444444';
-    if (swatch) swatch.style.background = normalized || fallback;
-    if (valueEl) valueEl.textContent = normalized ? normalized.toUpperCase() : '--';
+    if (swatch) swatch.style.background = color || fallback;
   }
 
-  function setColorValue(color, { notify = true, force = false } = {}) {
-    const normalized = normalizeColorHex(color) || PLAYER_COLORS[0];
-    const colorInput = document.getElementById('prefColor');
-    if (colorInput) colorInput.value = normalized;
-    updateColorDisplay(normalized);
-    if (notify) {
-      syncPrefsFromInputs({ force });
+  function syncLocalPlayerColor(color) {
+    const normalized = normalizeColorHex(color);
+    if (!normalized || normalized === state.localColorHex) {
+      if (!normalized) updateAssignedColorSwatch(null);
+      return;
     }
-  }
-
-  function syncLocalColorFromLobby() {
-    const localId = firebaseSession.getPlayerId();
-    if (!localId) return false;
-    const byId = (state.lobbyPlayers || {})[localId];
-    const match = byId || Object.values(state.lobbyPlayers || {}).find((player) => player?.id === localId);
-    const serverColor = normalizeColorHex(match?.color);
-    if (!serverColor) return false;
-    const colorInput = document.getElementById('prefColor');
-    const current = colorInput ? normalizeColorHex(colorInput.value) : null;
-    if (current === serverColor) return false;
-    setColorValue(serverColor, { notify: true, force: true });
-    return true;
-  }
-
-  function enforceAvailableColorSelection(options = {}) {
-    const colorInput = document.getElementById('prefColor');
-    if (!colorInput) return;
-    const localId = firebaseSession.getPlayerId();
-    const used = buildUsedColorSet(localId);
-    const current = normalizeColorHex(colorInput.value);
-    const next = getAvailableColor(current, used);
-    if (!current || next !== current) {
-      setColorValue(next, { notify: options.notify !== false, force: !!options.force });
-    } else {
-      updateColorDisplay(current);
+    state.localColorHex = normalized;
+    updateAssignedColorSwatch(normalized);
+    const localPlayer = gameState?.players?.[0];
+    if (localPlayer) {
+      localPlayer.color = normalizeColorPayload(normalized);
+      localRuntime.refreshPlayerUi();
     }
   }
 
@@ -295,7 +248,6 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     try {
       await firebaseSession.updateProfile({
         name: state.pendingPrefs.name,
-        color: state.pendingPrefs.color,
         controls: state.pendingPrefs.controls
       });
     } catch (e) {
@@ -482,14 +434,19 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function handlePlayersUpdate(players) {
     state.lobbyPlayers = players || {};
     renderLobbyPlayers(state.lobbyPlayers);
+    const localId = firebaseSession.getPlayerId();
+    if (localId) {
+      const localEntry = state.lobbyPlayers[localId] || Object.values(state.lobbyPlayers || {}).find((player) => player?.id === localId);
+      if (localEntry?.color) {
+        syncLocalPlayerColor(localEntry.color);
+      }
+    }
     const assignedSlots = localRuntime.assignRemotePlayers(state.lobbyPlayers);
     if (state.mpMode !== 'host' && state.mpMode !== 'guest') {
       const total = gameState?.players?.length || 0;
       updateMpStatus(`Players: ${Math.min(assignedSlots, total)} / ${total}`);
     }
     updateLobbyUi();
-    syncLocalColorFromLobby();
-    enforceAvailableColorSelection({ force: true });
   }
 
   function handleMetaChange(meta = {}) {
@@ -591,12 +548,13 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     state.lobbyMeta = {};
     state.localReady = false;
     state.mpMode = state.mpMode === 'local' ? 'local' : null;
+    state.localColorHex = null;
     setPrefInputsDisabled(false);
     state.lastAppliedSpawnKey = null;
     state.showLobbyOnWaiting = false;
     clearResultState();
     renderLobbyPlayers(state.lobbyPlayers);
-    enforceAvailableColorSelection({ notify: false });
+    updateAssignedColorSwatch(null);
     updateLobbyUi();
     updateLatency(null);
     updateRoomInfo(null);
@@ -612,7 +570,6 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const p1 = players[0] || {};
     return {
       name: p1.name || nextDummyName(),
-      color: hexFromColorPayload(p1.color),
       controls: p1.controls || 'ArrowLeft / ArrowRight'
     };
   }
@@ -627,7 +584,6 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const selectLocal = document.getElementById('selectLocal');
     const selectMp = document.getElementById('selectMp');
     const nameInput = document.getElementById('prefName');
-    const colorInput = document.getElementById('prefColor');
     const controlsInput = document.getElementById('prefControls');
 
     const ensureDummyNameSeed = () => {
@@ -641,14 +597,12 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
     state.capturePrefs = () => ({
       name: ensureDummyNameSeed(),
-      color: normalizeColorHex(colorInput && colorInput.value) || PLAYER_COLORS[0],
       controls: (controlsInput && controlsInput.value) || 'ArrowLeft / ArrowRight'
     });
 
     state.prefInputs = [nameInput, controlsInput].filter(Boolean);
     setPrefInputsDisabled(false);
     ensureDummyNameSeed();
-    enforceAvailableColorSelection({ notify: false });
 
     const handlePrefInput = () => {
       syncPrefsFromInputs();
