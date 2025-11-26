@@ -171,6 +171,15 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     return state.pendingPrefs;
   }
 
+  function updatePrimaryActionsVisibility() {
+    const playerBtn = document.getElementById('openPlayerMenuBtn');
+    const startBtn = document.getElementById('startGameBtn');
+    const isMultiplayer = state.mpMode === 'host' || state.mpMode === 'guest' || state.hasSelectedMultiplayer;
+    const display = isMultiplayer ? 'none' : '';
+    if (playerBtn) playerBtn.style.display = display;
+    if (startBtn) startBtn.style.display = display;
+  }
+
   async function syncRoomProfileFromPrefs() {
     if (!firebaseSession.isConnected() || !state.pendingPrefs) return;
     try {
@@ -482,6 +491,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     syncContext();
     localRuntime.attachDefaultInputHandlers();
     localRuntime.refreshPlayerUi();
+    updatePrimaryActionsVisibility();
   }
 
   function getPlayerInfo() {
@@ -524,6 +534,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     renderLobbyPlayers(state.lobbyPlayers);
     updateLobbyRoleUi();
     updateLobbyUi();
+    updatePrimaryActionsVisibility();
 
     if (selectLocal) {
       selectLocal.addEventListener('click', async () => {
@@ -543,6 +554,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         syncContext();
         localRuntime.attachDefaultInputHandlers();
         localRuntime.refreshPlayerUi();
+        updatePrimaryActionsVisibility();
       });
     }
 
@@ -557,6 +569,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         setModeOverlayState('lobby');
         updateLobbyRoleUi();
         updateMpStatus('Multiplayer selected - create or join a room');
+        updatePrimaryActionsVisibility();
       });
     }
   }
@@ -619,6 +632,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     updateLobbyUi();
     state.showLobbyOnWaiting = true;
     setModeOverlayState('lobby');
+    updatePrimaryActionsVisibility();
 
     const callbacks = {
       onWinner: (player) => {
@@ -667,6 +681,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     updateLobbyUi();
     state.showLobbyOnWaiting = true;
     setModeOverlayState('lobby');
+    updatePrimaryActionsVisibility();
   }
 
   function wireMultiplayerUI() {
