@@ -18,11 +18,7 @@ export function createFirebaseSession(initialCallbacks = {}) {
     if (!client) return;
     client.listenPlayers((players) => invoke('onPlayersUpdate', players));
     client.listenMeta((meta) => invoke('onMetaUpdate', meta));
-    if (role === 'host') {
-      client.listenInputs((inputs) => invoke('onInputIntent', inputs));
-    } else if (role === 'guest') {
-      client.listenState((state) => invoke('onStateUpdate', state));
-    }
+    client.listenInputs((inputs) => invoke('onInputIntent', inputs));
   }
 
   async function connect(roomId, playerInfo, isHost) {

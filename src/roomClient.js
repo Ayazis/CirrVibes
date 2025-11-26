@@ -48,7 +48,6 @@ export class RoomClient {
   }
 
   listenInputs(cb) {
-    if (!this.isHost) throw new Error('Only host listens to inputs');
     const unsub = listen(roomRef(this.roomId, 'inputs'), (val) => cb(val || {}));
     this._listeners.push(unsub);
     return unsub;

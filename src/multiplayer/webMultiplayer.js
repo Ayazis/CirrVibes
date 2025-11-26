@@ -1,6 +1,5 @@
 import { openPlayerConfigMenu, showDrawOverlay, showWinnerOverlay } from '../ui/overlays.js';
 import { startFixedStepLoop, resetGame as resetGameState, forceReset as forceResetState } from '../gameLoop.js';
-import { Trail } from '../trail.js';
 import { cssFromColor, normalizeColorPayload, rgbaFromHex } from './colorUtils.js';
 import { createFirebaseSession } from './firebaseSession.js';
 
@@ -155,11 +154,20 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     });
   }
 
+  function rebindInputHandlers() {
+    const isNetMode = state.mpMode === 'host' || state.mpMode === 'guest';
+    if (isNetMode && firebaseSession.isConnected()) {
+      attachNetworkInputHandlers();
+      return;
+    }
+    localRuntime.attachDefaultInputHandlers();
+  }
+
   function applyLocalPrefsFromInputs() {
     if (!state.capturePrefs) return state.pendingPrefs;
     state.pendingPrefs = state.capturePrefs();
     localRuntime.applyLocalPrefs(state.pendingPrefs);
-    localRuntime.attachDefaultInputHandlers();
+    rebindInputHandlers();
     return state.pendingPrefs;
   }
 
@@ -375,6 +383,9 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     if (result?.key && result.key !== state.lastResultShownKey) {
       showMatchResult(result);
     }
+    if ((state.mpMode === 'host' || state.mpMode === 'guest') && gameState) {
+      gameState.paused = status !== 'running';
+    }
     if (!state.hasSelectedMultiplayer) return;
     if (status === 'running') {
       state.showLobbyOnWaiting = false;
@@ -388,64 +399,65 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   function handleRemoteInputs(inputs = {}) {
     const players = gameState?.players || [];
+    const localId = firebaseSession.getPlayerId();
+    let freshestTs = null;
     Object.entries(inputs).forEach(([pid, intent]) => {
+      if (localId && pid === localId) return;
       const player = players.find((p) => p && p.clientId === pid);
       if (!player) return;
+      const seq = typeof intent.seq === 'number' ? intent.seq : Number(intent.seq);
+      if (typeof seq === 'number' && !Number.isNaN(seq)) {
+        const prevSeq = typeof player._lastRemoteInputSeq === 'number' ? player._lastRemoteInputSeq : -Infinity;
+        if (seq <= prevSeq) return;
+        player._lastRemoteInputSeq = seq;
+      }
       player.isTurningLeft = !!intent.turningLeft;
       player.isTurningRight = !!intent.turningRight;
+      const ts = typeof intent.ts === 'number' ? intent.ts : Number(intent.ts);
+      if (typeof ts === 'number' && !Number.isNaN(ts)) {
+        freshestTs = freshestTs == null ? ts : Math.max(freshestTs, ts);
+      }
+    });
+    if (freshestTs != null) {
+      const lag = Date.now() - freshestTs;
+      updateLatency(lag);
+    }
+  }
+
+  function sendLocalInputIntent(flags = {}) {
+    if (!firebaseSession.isConnected()) return;
+    state.inputSeq += 1;
+    firebaseSession.sendInput({
+      seq: state.inputSeq,
+      ts: Date.now(),
+      turningLeft: !!flags.isTurningLeft,
+      turningRight: !!flags.isTurningRight
     });
   }
 
-  function handleRemoteState(remoteState = {}) {
-    const players = gameState?.players || [];
-    const incoming = remoteState.players || [];
-    const isFreshFrame = typeof remoteState.frame === 'number' && remoteState.frame <= 1;
-    const updated = new Set();
-    incoming.forEach((p, idx) => {
-      const cfg = { name: p.name, color: p.color, controls: p.controls, clientId: p.clientId };
-      let player = (p.clientId && localRuntime.playerByClientId?.(p.clientId)) || players[idx];
-      if (!player) player = localRuntime.ensurePlayerSlot(idx, cfg);
-      if (!player) return;
-      if (cfg.clientId) player.clientId = cfg.clientId;
-      if (cfg.name) player.name = cfg.name;
-      if (cfg.controls) player.controls = cfg.controls;
-      if (cfg.color) player.color = Array.isArray(cfg.color) ? cfg.color : rgbaFromHex(cfg.color);
-      player.snakePosition.x = p.x;
-      player.snakePosition.y = p.y;
-      player.snakeDirection = p.direction;
-      player.isAlive = p.isAlive;
-      player.score = p.score;
-      if (!player.trail || isFreshFrame) {
-        player.trail = new Trail(1024, p.x, p.y);
-      } else {
-        const scratch = player._trailScratch || (player._trailScratch = { x: p.x, y: p.y });
-        const last = player.trail.peekLast(scratch);
-        if (!last || last.x !== p.x || last.y !== p.y) {
-          player.trail.push(p.x, p.y);
-        }
-      }
-      updated.add(player);
-    });
-    players.forEach((pl) => {
-      if (!updated.has(pl)) {
-        pl.active = false;
-      } else {
-        pl.active = true;
+  function attachNetworkInputHandlers() {
+    if (!gameState?.players) return;
+    const localId = firebaseSession.getPlayerId();
+    if (!localId) return;
+    const localPlayer = (gameState.players || []).find((p) => p && p.clientId === localId);
+    if (!localPlayer) return;
+    localRuntime.attachCustomInputHandlers({
+      players: [localPlayer],
+      onInputChange: (_playerIdx, flags) => {
+        if (!firebaseSession.isConnected()) return;
+        sendLocalInputIntent(flags);
       }
     });
-    try { localRuntime.updateControls(); } catch (e) {}
-    try { localRuntime.renderRoster(); } catch (e) {}
-    if (remoteState.lastUpdate) {
-      const lag = Date.now() - remoteState.lastUpdate;
-      updateLatency(lag);
-    }
+    sendLocalInputIntent({
+      isTurningLeft: !!localPlayer.isTurningLeft,
+      isTurningRight: !!localPlayer.isTurningRight
+    });
   }
 
   firebaseSession.setCallbacks({
     onPlayersUpdate: (players) => handlePlayersUpdate(players),
     onMetaUpdate: (meta) => handleMetaChange(meta || {}),
-    onInputIntent: (inputs) => handleRemoteInputs(inputs),
-    onStateUpdate: (remoteState) => handleRemoteState(remoteState || {})
+    onInputIntent: (inputs) => handleRemoteInputs(inputs)
   });
 
   async function cleanupRoomClient() {
@@ -468,6 +480,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     updateRoomInfo(null);
     updateMpStatus('Offline');
     syncContext();
+    localRuntime.attachDefaultInputHandlers();
     localRuntime.refreshPlayerUi();
   }
 
@@ -578,6 +591,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   async function startHost(roomId) {
     state.mpMode = 'host';
+    state.inputSeq = 0;
     state.hasSelectedMultiplayer = true;
     localRuntime.pruneToLocalOnly();
     applyLocalPrefsFromInputs();
@@ -600,7 +614,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     setPrefInputsDisabled(false);
     try { await firebaseSession.setReady(false); } catch (e) {}
     localRuntime.refreshPlayerUi();
-    localRuntime.attachDefaultInputHandlers();
+    attachNetworkInputHandlers();
     updateLobbyRoleUi();
     updateLobbyUi();
     state.showLobbyOnWaiting = true;
@@ -616,25 +630,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         const result = createResultPayload('draw');
         firebaseSession.updateMeta({ status: 'waiting', finishedAt: Date.now(), lastResult: result });
         showMatchResult(result);
-      },
-      publishState: (statePayload) => {
-        const payload = {
-          frame: statePayload.frameCounter,
-          players: statePayload.players.map((p) => ({
-            id: p.id,
-            name: p.name,
-            color: p.color,
-            clientId: p.clientId || null,
-            x: p.snakePosition.x,
-            y: p.snakePosition.y,
-            direction: p.snakeDirection,
-            isAlive: p.isAlive,
-            score: p.score
-          }))
-        };
-        firebaseSession.publishState(payload);
-      },
-      publishHz: 8
+      }
     };
 
     startLoopWithCallbacks(callbacks);
@@ -643,6 +639,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   async function startGuest(roomId) {
     state.mpMode = 'guest';
+    state.inputSeq = 0;
     state.hasSelectedMultiplayer = true;
     localRuntime.pruneToLocalOnly();
     applyLocalPrefsFromInputs();
@@ -665,24 +662,11 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     setPrefInputsDisabled(false);
     try { await firebaseSession.setReady(false); } catch (e) {}
     localRuntime.refreshPlayerUi();
-    localRuntime.attachDefaultInputHandlers();
+    attachNetworkInputHandlers();
     updateLobbyRoleUi();
     updateLobbyUi();
     state.showLobbyOnWaiting = true;
     setModeOverlayState('lobby');
-
-    localRuntime.attachCustomInputHandlers({
-      players: gameState.players,
-      onInputChange: (playerIdx, flags) => {
-        state.inputSeq += 1;
-        firebaseSession.sendInput({
-          seq: state.inputSeq,
-          ts: Date.now(),
-          turningLeft: flags.isTurningLeft,
-          turningRight: flags.isTurningRight
-        });
-      }
-    });
   }
 
   function wireMultiplayerUI() {

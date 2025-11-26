@@ -64,7 +64,8 @@ export function createLocalRuntime({ gameState }) {
       color: rgbaFromHex(cfg?.color || '#66ccff'),
       controls: cfg?.controls || 'ArrowLeft / ArrowRight',
       score: cfg?.score || 0,
-      _deathProcessed: false
+      _deathProcessed: false,
+      _lastRemoteInputSeq: null
     };
   }
 
@@ -162,7 +163,8 @@ export function createLocalRuntime({ gameState }) {
       if (rp.id === context.roomPlayerId) return;
       if (slot >= 4) return;
       const cfg = { name: rp.name, color: rp.color, controls: rp.controls, clientId: rp.id || rp.playerId };
-      ensurePlayerSlot(slot, cfg);
+      const player = ensurePlayerSlot(slot, cfg);
+      if (player) player._lastRemoteInputSeq = null;
       slot += 1;
     });
     rebuildOccupancy();
@@ -203,8 +205,15 @@ export function createLocalRuntime({ gameState }) {
       player.isTurningLeft = false;
       player.isTurningRight = false;
       player._deathProcessed = false;
+      player._lastRemoteInputSeq = null;
     });
     rebuildOccupancy();
+    if (gameState) {
+      gameState.frameCounter = 0;
+      gameState.gameOverLogged = false;
+      gameState.winnerShown = false;
+      gameState.paused = false;
+    }
     refreshPlayerUi();
     logPlayerPositions(snapshot.key || 'applied');
   }

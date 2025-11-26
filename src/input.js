@@ -12,6 +12,7 @@ export function buildInputMappings(players) {
   mousePlayerIndex = null;
   const playersArr = players || [];
   playersArr.forEach((p, idx) => {
+    if (!p) return;
     const cfg = (p.controls || '').toLowerCase();
     if (cfg.includes('arrow')) {
       controlsMap.set('arrowleft', { playerIndex: idx, side: 'left' });
