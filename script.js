@@ -23,6 +23,7 @@ let lobbyMeta = {};
 let localReady = false;
 let hasSelectedMultiplayer = false;
 let prefInputs = [];
+let lastAppliedSpawnKey = null;
 
 const MIN_MULTIPLAYER_PLAYERS = 2;
 
@@ -102,6 +103,19 @@ function updateMpError(text) {
   console.error('[multiplayer]', text);
 }
 
+function logPlayerPositions(context = 'snapshot') {
+  if (!window.gameState?.players) return;
+  const data = window.gameState.players.filter(Boolean).map((p, idx) => ({
+    slot: idx,
+    name: p.name,
+    clientId: p.clientId,
+    x: Number(p.snakePosition?.x ?? 0).toFixed(2),
+    y: Number(p.snakePosition?.y ?? 0).toFixed(2),
+    direction: Number(p.snakeDirection ?? 0).toFixed(2)
+  }));
+  console.log(`[spawn:${context}]`, data);
+}
+
 function setPrefInputsDisabled(disabled) {
   prefInputs.forEach((input) => {
     if (input) input.disabled = !!disabled;
@@ -126,6 +140,74 @@ async function syncRoomProfileFromPrefs() {
   } catch (e) {
     console.warn('syncRoomProfileFromPrefs failed', e);
   }
+}
+
+function playerByClientId(clientId) {
+  if (!clientId) return null;
+  return (window.gameState?.players || []).find((p) => p && p.clientId === clientId);
+}
+
+function applySpawnSnapshot(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.players)) return;
+  if (!window.gameState) return;
+  const ownId = roomClient?.playerId;
+  snapshot.players.forEach((info, idx) => {
+    let player = info.clientId ? playerByClientId(info.clientId) : null;
+    if (!player && info.clientId === ownId && window.gameState.players?.[0]) {
+      player = window.gameState.players[0];
+      player.clientId = info.clientId;
+    }
+    if (!player) {
+      const targetIdx = typeof info.index === 'number' ? info.index : idx;
+      player = ensurePlayerSlot(targetIdx, { name: info.name });
+      if (!player) return;
+      player.clientId = info.clientId || player.clientId;
+    }
+    if (info.name) player.name = info.name;
+    if (info.controls) player.controls = info.controls;
+    if (info.color) player.color = Array.isArray(info.color) ? info.color : rgbaFromHex(info.color);
+    if (typeof info.x === 'number') player.snakePosition.x = info.x;
+    if (typeof info.y === 'number') player.snakePosition.y = info.y;
+    if (typeof info.direction === 'number') player.snakeDirection = info.direction;
+    player.trail = new Trail(1024, player.snakePosition.x, player.snakePosition.y);
+    player.isAlive = true;
+    player.isTurningLeft = false;
+    player.isTurningRight = false;
+    player._deathProcessed = false;
+  });
+  rebuildOccupancy();
+  deactivateInactiveSlots();
+  updateControls(window.gameState.players);
+  renderRoster(window.gameState.players);
+  logPlayerPositions(snapshot.key || 'applied');
+}
+
+async function broadcastSpawnSnapshot() {
+  if (!roomClient || mpMode !== 'host') return null;
+  if (!window.gameState?.players) return null;
+  const key = `spawn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const players = window.gameState.players.map((p, idx) => {
+    if (!p) return null;
+    return {
+      index: idx,
+      id: p.id,
+      clientId: p.clientId || null,
+      name: p.name,
+      x: p.snakePosition.x,
+      y: p.snakePosition.y,
+      direction: p.snakeDirection,
+      color: p.color,
+      controls: p.controls
+    };
+  }).filter(Boolean);
+  try {
+    await roomClient.updateMeta({ spawnSnapshot: { key, players } });
+    lastAppliedSpawnKey = key;
+    logPlayerPositions('host-broadcast');
+  } catch (e) {
+    console.warn('broadcastSpawnSnapshot failed', e);
+  }
+  return key;
 }
 
 function setModeOverlayState(mode) {
@@ -247,6 +329,11 @@ async function beginHostedMatch() {
   updateLobbyUi();
   setModeOverlayState('hidden');
   try {
+    await broadcastSpawnSnapshot();
+  } catch (e) {
+    console.warn('Spawn snapshot failed', e);
+  }
+  try {
     await roomClient.updateMeta({ status: 'running', startedAt: startTs });
   } catch (e) {
     updateMpError(`Failed to start match: ${e?.message || e}`);
@@ -263,6 +350,11 @@ function handlePlayersUpdate(players) {
 function handleMetaChange(meta = {}) {
   lobbyMeta = meta || {};
   const status = lobbyMeta.status || 'waiting';
+  const snapshot = lobbyMeta.spawnSnapshot;
+  if (snapshot?.key && snapshot.key !== lastAppliedSpawnKey) {
+    applySpawnSnapshot(snapshot);
+    lastAppliedSpawnKey = snapshot.key;
+  }
   if (!hasSelectedMultiplayer) return;
   if (status === 'running') {
     setModeOverlayState('hidden');
@@ -284,6 +376,7 @@ function resetLobbyState() {
   localReady = false;
   mpMode = mpMode === 'local' ? 'local' : null;
   setPrefInputsDisabled(false);
+  lastAppliedSpawnKey = null;
   renderLobbyPlayers(lobbyPlayers);
   updateLobbyUi();
   updateLatency(null);
@@ -368,7 +461,9 @@ function ensurePlayerSlot(idx, cfg) {
     const p = window.gameState.players[idx];
     p.name = cfg.name || p.name;
     p.controls = cfg.controls || p.controls;
-    p.color = cfg.color ? rgbaFromHex(cfg.color) : p.color;
+    if (cfg.color) {
+      p.color = Array.isArray(cfg.color) ? cfg.color : rgbaFromHex(cfg.color);
+    }
     p.clientId = cfg.clientId || p.clientId;
     p.active = true;
   }
@@ -601,6 +696,7 @@ async function startHost(roomId) {
           id: p.id,
           name: p.name,
           color: p.color,
+          clientId: p.clientId || null,
           x: p.snakePosition.x,
           y: p.snakePosition.y,
           direction: p.snakeDirection,
@@ -659,18 +755,42 @@ async function startGuest(roomId) {
     const players = window.gameState?.players || [];
     // Ensure slots exist for incoming state
     const incoming = state.players || [];
+    const isFreshFrame = typeof state.frame === 'number' && state.frame <= 1;
+    const updated = new Set();
     incoming.forEach((p, idx) => {
-      ensurePlayerSlot(idx, { name: p.name, color: p.color, controls: p.controls });
+      const cfg = { name: p.name, color: p.color, controls: p.controls, clientId: p.clientId };
+      let player = (p.clientId && playerByClientId(p.clientId)) || players[idx];
+      if (!player) player = ensurePlayerSlot(idx, cfg);
+      if (!player) return;
+      if (cfg.clientId) player.clientId = cfg.clientId;
+      if (cfg.name) player.name = cfg.name;
+      if (cfg.controls) player.controls = cfg.controls;
+      if (cfg.color) player.color = Array.isArray(cfg.color) ? cfg.color : rgbaFromHex(cfg.color);
+      player.snakePosition.x = p.x;
+      player.snakePosition.y = p.y;
+      player.snakeDirection = p.direction;
+      player.isAlive = p.isAlive;
+      player.score = p.score;
+      if (!player.trail || isFreshFrame) {
+        player.trail = new Trail(1024, p.x, p.y);
+      } else {
+        const scratch = player._trailScratch || (player._trailScratch = { x: p.x, y: p.y });
+        const last = player.trail.peekLast(scratch);
+        if (!last || last.x !== p.x || last.y !== p.y) {
+          player.trail.push(p.x, p.y);
+        }
+      }
+      updated.add(player);
     });
-    (state.players || []).forEach((p, idx) => {
-      if (!players[idx]) return;
-      players[idx].snakePosition.x = p.x;
-      players[idx].snakePosition.y = p.y;
-      players[idx].snakeDirection = p.direction;
-      players[idx].isAlive = p.isAlive;
-      players[idx].score = p.score;
+    players.forEach((pl) => {
+      if (!updated.has(pl)) {
+        pl.active = false;
+      } else {
+        pl.active = true;
+      }
     });
     try { updateControls(window.gameState.players); } catch (e) {}
+    try { renderRoster(window.gameState.players); } catch (e) {}
     if (state.lastUpdate) {
       const lag = Date.now() - state.lastUpdate;
       updateLatency(lag);
