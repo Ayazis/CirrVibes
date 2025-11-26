@@ -183,6 +183,8 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function renderLobbyPlayers(players) {
     const listEl = document.getElementById('mpPlayerList');
     if (!listEl) return;
+    const hostId = state.lobbyMeta?.hostId || null;
+    const localId = firebaseSession.getPlayerId();
     const entries = Object.values(players || {}).sort((a, b) => (a?.joinedAt || 0) - (b?.joinedAt || 0));
     if (!entries.length) {
       listEl.innerHTML = '<div class="muted-text">No players connected</div>';
@@ -191,9 +193,13 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const rows = entries.map((p) => {
       const color = cssFromColor(rgbaFromHex(p?.color || '#888888'));
       const name = escapeHtml(p?.name || p?.id || 'Player');
+      const isHost = !!(p && (
+        (hostId && p.id === hostId) ||
+        (typeof p.isHost === 'boolean' ? p.isHost : (state.mpMode === 'host' && localId && p.id === localId))
+      ));
       const ready = !!p?.ready;
-      const badgeClass = ready ? 'yes' : 'no';
-      const label = ready ? 'Ready' : 'Not ready';
+      const badgeClass = isHost ? 'host' : ready ? 'yes' : 'no';
+      const label = isHost ? 'Host' : ready ? 'Ready' : 'Not ready';
       return `<div class="mp-player"><div class="player-info"><span class="swatch" style="background:${color};"></span><span>${name}</span></div><span class="ready badge ${badgeClass}">${label}</span></div>`;
     }).join('');
     listEl.innerHTML = rows;
@@ -203,7 +209,25 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const players = Object.values(state.lobbyPlayers || {});
     const total = players.length;
     const ready = players.filter((p) => p && p.ready).length;
-    return { total, ready };
+    const hostId = state.lobbyMeta?.hostId || null;
+    const localId = firebaseSession.getPlayerId();
+    const hostPresent = players.some((p) => {
+      if (!p) return false;
+      if (hostId) return p.id === hostId;
+      if (typeof p.isHost === 'boolean') return !!p.isHost;
+      if (state.mpMode === 'host' && localId) return p.id === localId;
+      return false;
+    });
+    const guests = players.filter((p) => {
+      if (!p) return false;
+      if (hostId) return p.id !== hostId;
+      if (typeof p.isHost === 'boolean') return !p.isHost;
+      if (state.mpMode === 'host' && localId) return p.id !== localId;
+      return true;
+    });
+    const guestTotal = guests.length;
+    const guestReady = guests.filter((p) => p.ready).length;
+    return { total, ready, guestTotal, guestReady, hostPresent };
   }
 
   function updateLobbyRoleUi() {
@@ -211,7 +235,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const startBtn = document.getElementById('mpStartBtn');
     if (!readyBtn || !startBtn) return;
     if (state.mpMode === 'host') {
-      readyBtn.style.display = 'inline-flex';
+      readyBtn.style.display = 'none';
       startBtn.style.display = 'inline-flex';
     } else if (state.mpMode === 'guest') {
       readyBtn.style.display = 'inline-flex';
@@ -227,8 +251,17 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const readyBtn = document.getElementById('mpReadyBtn');
     const startBtn = document.getElementById('mpStartBtn');
     const status = state.lobbyMeta?.status || 'waiting';
-    const { total, ready } = lobbyCounts();
-    const statusText = total ? `Players ready: ${ready}/${total}` : 'Waiting for players...';
+    const { total, ready, guestTotal, guestReady, hostPresent } = lobbyCounts();
+    const guestsReady = guestTotal > 0 && guestReady === guestTotal;
+    const enoughPlayers = total >= MIN_MULTIPLAYER_PLAYERS;
+    let statusText = 'Waiting for players...';
+    if (total) {
+      if (hostPresent) {
+        statusText = guestTotal ? `Guests ready: ${guestReady}/${guestTotal}` : 'Waiting for guests...';
+      } else {
+        statusText = `Players ready: ${ready}/${total}`;
+      }
+    }
     if (firebaseSession.isConnected() && (state.mpMode === 'host' || state.mpMode === 'guest')) {
       updateMpStatus(statusText);
     }
@@ -237,15 +270,26 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       readyBtn.disabled = !firebaseSession.isConnected() || ((state.mpMode !== 'guest' && state.mpMode !== 'host')) || status === 'running';
     }
     if (startBtn) {
-      const canStart = state.mpMode === 'host' && status !== 'running' && total >= MIN_MULTIPLAYER_PLAYERS && ready === total;
+      const canStart = state.mpMode === 'host' && status !== 'running' && enoughPlayers && guestsReady;
       startBtn.disabled = !canStart;
+      if (!guestsReady) {
+        startBtn.title = 'Waiting for other players to ready up';
+      } else if (!enoughPlayers) {
+        startBtn.title = `Need at least ${MIN_MULTIPLAYER_PLAYERS} players`;
+      } else {
+        startBtn.removeAttribute('title');
+      }
     }
   }
 
-  function areAllPlayersReady() {
-    const { total, ready } = lobbyCounts();
-    if (total < MIN_MULTIPLAYER_PLAYERS) return false;
-    return total > 0 && ready === total;
+  function areGuestsReady() {
+    const { guestTotal, guestReady } = lobbyCounts();
+    return guestTotal > 0 && guestReady === guestTotal;
+  }
+
+  function hasEnoughPlayers() {
+    const { total } = lobbyCounts();
+    return total >= MIN_MULTIPLAYER_PLAYERS;
   }
 
   async function setLocalReadyState(nextReady) {
@@ -275,7 +319,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   async function beginHostedMatch() {
     if (!firebaseSession.isConnected() || state.mpMode !== 'host') return;
-    if (!areAllPlayersReady()) return;
+    if (!hasEnoughPlayers() || !areGuestsReady()) return;
     if (!gameState) return;
     updateMpStatus('Starting match...');
     forceResetState(gameState);
@@ -687,6 +731,9 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
     if (startBtn) {
       startBtn.addEventListener('click', () => {
+        if (!firebaseSession.isConnected() || state.mpMode !== 'host') return;
+        if ((state.lobbyMeta?.status || 'waiting') === 'running') return;
+        if (!hasEnoughPlayers() || !areGuestsReady()) return;
         beginHostedMatch();
       });
     }
