@@ -1,6 +1,6 @@
 // Logic for drawing the scene - Achtung die Kurve style (instanced segment quad expansion)
-import { mat4 } from './mat4.js';
-import { resizeCanvasToDisplaySize } from './gameCanvas.js';
+import { mat4 } from "./mat4.js";
+import { resizeCanvasToDisplaySize } from "./gameCanvas.js";
 
 const TRAIL_WIDTH = 0.05;
 const VERTS_PER_SEGMENT = 6;
@@ -52,7 +52,7 @@ export const drawScene = (gl, canvas) => {
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+      console.error("Shader compile error:", gl.getShaderInfoLog(shader));
       gl.deleteShader(shader);
       return null;
     }
@@ -60,7 +60,10 @@ export const drawScene = (gl, canvas) => {
   };
 
   const vertexShader = compileShader(gl.VERTEX_SHADER, vertexShaderSource);
-  const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+  const fragmentShader = compileShader(
+    gl.FRAGMENT_SHADER,
+    fragmentShaderSource,
+  );
   if (!vertexShader || !fragmentShader) return;
 
   const program = gl.createProgram();
@@ -68,26 +71,53 @@ export const drawScene = (gl, canvas) => {
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program link error:', gl.getProgramInfoLog(program));
+    console.error("Program link error:", gl.getProgramInfoLog(program));
     gl.deleteProgram(program);
     return;
   }
   gl.useProgram(program);
 
-  const startLocation = gl.getAttribLocation(program, 'start');
-  const endLocation = gl.getAttribLocation(program, 'end');
-  const cornerLocation = gl.getAttribLocation(program, 'corner');
-  const trailWidthLocation = gl.getUniformLocation(program, 'trailWidth');
-  const baseColorLocation = gl.getUniformLocation(program, 'baseColor');
-  const modelViewMatrixLocation = gl.getUniformLocation(program, 'modelViewMatrix');
-  const projectionMatrixLocation = gl.getUniformLocation(program, 'projectionMatrix');
+  const startLocation = gl.getAttribLocation(program, "start");
+  const endLocation = gl.getAttribLocation(program, "end");
+  const cornerLocation = gl.getAttribLocation(program, "corner");
+  const trailWidthLocation = gl.getUniformLocation(program, "trailWidth");
+  const baseColorLocation = gl.getUniformLocation(program, "baseColor");
+  const modelViewMatrixLocation = gl.getUniformLocation(
+    program,
+    "modelViewMatrix",
+  );
+  const projectionMatrixLocation = gl.getUniformLocation(
+    program,
+    "projectionMatrix",
+  );
 
   gl.enableVertexAttribArray(startLocation);
   gl.enableVertexAttribArray(endLocation);
   gl.enableVertexAttribArray(cornerLocation);
-  gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 0);
-  gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 8);
-  gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 16);
+  gl.vertexAttribPointer(
+    startLocation,
+    2,
+    gl.FLOAT,
+    false,
+    FLOATS_PER_VERTEX * 4,
+    0,
+  );
+  gl.vertexAttribPointer(
+    endLocation,
+    2,
+    gl.FLOAT,
+    false,
+    FLOATS_PER_VERTEX * 4,
+    8,
+  );
+  gl.vertexAttribPointer(
+    cornerLocation,
+    1,
+    gl.FLOAT,
+    false,
+    FLOATS_PER_VERTEX * 4,
+    16,
+  );
 
   let modelViewMatrix = mat4.create();
   let projectionMatrix = mat4.create();
@@ -120,13 +150,14 @@ export const drawScene = (gl, canvas) => {
   };
 
   const buildTrailVertices = (trail) => {
-    if (!trail || typeof trail.length !== 'number' || trail.length < 2) return 0;
+    if (!trail || typeof trail.length !== "number" || trail.length < 2)
+      return 0;
     const segmentCount = trail.length - 1;
     const requiredFloats = segmentCount * FLOATS_PER_SEGMENT;
     ensureScratchCapacity(requiredFloats);
 
     let offset = 0;
-    if (typeof trail.get === 'function') {
+    if (typeof trail.get === "function") {
       for (let i = 1; i < trail.length; i++) {
         const prev = trail.get(i - 1, prevPoint);
         const curr = trail.get(i, currPoint);
@@ -137,7 +168,13 @@ export const drawScene = (gl, canvas) => {
       for (let i = 1; i < trail.length; i++) {
         const prev = trail[i - 1];
         const curr = trail[i];
-        if (!prev || !curr || typeof prev.x !== 'number' || typeof curr.x !== 'number') continue;
+        if (
+          !prev ||
+          !curr ||
+          typeof prev.x !== "number" ||
+          typeof curr.x !== "number"
+        )
+          continue;
         offset = writeSegment(offset, prev.x, prev.y, curr.x, curr.y);
       }
     }
@@ -165,7 +202,7 @@ export const drawScene = (gl, canvas) => {
       -verticalBoundary,
       verticalBoundary,
       -1,
-      1
+      1,
     );
 
     gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
@@ -176,7 +213,7 @@ export const drawScene = (gl, canvas) => {
         minX: -horizontalBoundary,
         maxX: horizontalBoundary,
         minY: -verticalBoundary,
-        maxY: verticalBoundary
+        maxY: verticalBoundary,
       };
       if (state.occupancyGrid) {
         state.occupancyGrid.updateBounds(
@@ -185,13 +222,13 @@ export const drawScene = (gl, canvas) => {
           state.viewBounds.minY,
           state.viewBounds.maxY,
           state.players,
-          state.frameCounter
+          state.frameCounter,
         );
       }
     }
   };
 
-  window.addEventListener('resize', () => {
+  window.addEventListener("resize", () => {
     needsViewUpdate = true;
   });
 

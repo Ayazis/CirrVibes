@@ -1,13 +1,20 @@
-import { VIEW_SIZE, TRAIL_SAFE_FRAMES } from './constants.js';
-import { generateRandomStartingPosition, computeViewBounds } from './viewUtils.js';
-import { Trail } from './trail.js';
-import { OccupancyGrid } from './occupancyGrid.js';
-import { loadPlayerConfig } from './persistence.js';
+import { VIEW_SIZE, TRAIL_SAFE_FRAMES } from "./constants.js";
+import {
+  generateRandomStartingPosition,
+  computeViewBounds,
+} from "./viewUtils.js";
+import { Trail } from "./trail.js";
+import { OccupancyGrid } from "./occupancyGrid.js";
+import { loadPlayerConfig } from "./persistence.js";
 
 function hexToRgbArray(hex) {
   if (!hex) return [1.0, 1.0, 1.0, 1.0];
-  let h = hex.replace('#', '');
-  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  let h = hex.replace("#", "");
+  if (h.length === 3)
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
   const r = parseInt(h.slice(0, 2), 16) / 255;
   const g = parseInt(h.slice(2, 4), 16) / 255;
   const b = parseInt(h.slice(4, 6), 16) / 255;
@@ -20,12 +27,19 @@ export function createInitialGameState() {
 
   const savedConfig = loadPlayerConfig();
   const defaultConfig = [
-    { name: 'Player 1', color: '#ff6666', controls: 'ArrowLeft / ArrowRight' },
-    { name: 'Player 2', color: '#6666ff', controls: 'Mouse Left / Mouse Right' },
-    { name: 'Player 3', color: '#66ff66', controls: 'A / D' },
-    { name: 'Player 4', color: '#ffaa66', controls: 'J / L' }
+    { name: "Player 1", color: "#ff6666", controls: "ArrowLeft / ArrowRight" },
+    {
+      name: "Player 2",
+      color: "#6666ff",
+      controls: "Mouse Left / Mouse Right",
+    },
+    { name: "Player 3", color: "#66ff66", controls: "A / D" },
+    { name: "Player 4", color: "#ffaa66", controls: "J / L" },
   ];
-  const effectiveConfig = (Array.isArray(savedConfig) && savedConfig.length >= 2) ? savedConfig : defaultConfig;
+  const effectiveConfig =
+    Array.isArray(savedConfig) && savedConfig.length >= 2
+      ? savedConfig
+      : defaultConfig;
 
   const players = effectiveConfig.slice(0, 4).map((cfg, idx) => {
     const start = generateRandomStartingPosition();
@@ -45,7 +59,7 @@ export function createInitialGameState() {
       color: hexToRgbArray(cfg.color),
       controls: cfg.controls || defaultConfig[idx].controls,
       score: 0,
-      _deathProcessed: false
+      _deathProcessed: false,
     };
   });
 
@@ -57,7 +71,7 @@ export function createInitialGameState() {
     viewBounds.minY,
     viewBounds.maxY,
     players,
-    0
+    0,
   );
 
   const state = {
@@ -67,7 +81,7 @@ export function createInitialGameState() {
     viewBounds,
     frameCounter: 0,
     paused: true,
-    occupancyGrid
+    occupancyGrid,
   };
 
   state.player1 = state.players[0];

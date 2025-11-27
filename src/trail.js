@@ -5,7 +5,7 @@ export class Trail {
     this._data = new Float32Array(this._cap * 2);
     this._start = 0;
     this._count = 0;
-    if (typeof startX === 'number' && typeof startY === 'number') {
+    if (typeof startX === "number" && typeof startY === "number") {
       this.push(startX, startY);
     }
   }

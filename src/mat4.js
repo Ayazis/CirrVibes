@@ -1,5 +1,7 @@
 // Utility functions for matrix operations
-const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+const IDENTITY = new Float32Array([
+  1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+]);
 const pool = [];
 
 export const mat4 = {
@@ -64,7 +66,9 @@ export const mat4 = {
 
     if (len === 0) return null;
 
-    const nx = x / len, ny = y / len, nz = z / len;
+    const nx = x / len,
+      ny = y / len,
+      nz = z / len;
 
     out[0] = c + t * nx * nx;
     out[1] = t * nx * ny - s * nz;

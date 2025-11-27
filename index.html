@@ -1,81 +1,112 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Achtung die Kurve - 3D Web Version</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="controls-info">
-    <h2>Achtung die Kurve - Two Player Edition</h2>
-    <div class="player-controls">
-      <div id="roster" class="roster"></div>
-    </div>
-    <div id="roomDisplay" class="room-display">Room: --</div>
-    <div class="game-info">
-      <p>Avoid hitting boundaries and trails.</p>
-    </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Line-Evader</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="controls-info">
+      <h2>Line-Evader</h2>
+      <div class="player-controls">
+        <div id="roster" class="roster"></div>
+      </div>
+      <div class="status-row">
+        <div id="roomDisplay" class="room-display">Room: --</div>
+        <div id="rendererDisplay" class="renderer-display">
+          Renderer: Detecting...
+        </div>
+      </div>
+      <div class="game-info">
+        <p>Avoid hitting boundaries and trails.</p>
+      </div>
       <div class="interface-actions">
         <button id="openPlayerMenuBtn" class="ghost">Player Selection</button>
         <button id="startGameBtn">Start</button>
       </div>
-  </div>
-  <canvas id="gameCanvas"></canvas>
+    </div>
+    <canvas id="gameCanvas"></canvas>
 
-  <div class="touch-controls" id="touchControls" aria-hidden="true">
-    <button class="touch-btn touch-btn-left" data-dir="left" aria-label="Turn left">&lsaquo;</button>
-    <button class="touch-btn touch-btn-right" data-dir="right" aria-label="Turn right">&rsaquo;</button>
-  </div>
+    <div class="touch-controls" id="touchControls" aria-hidden="true">
+      <button
+        class="touch-btn touch-btn-left"
+        data-dir="left"
+        aria-label="Turn left"
+      >
+        &lsaquo;
+      </button>
+      <button
+        class="touch-btn touch-btn-right"
+        data-dir="right"
+        aria-label="Turn right"
+      >
+        &rsaquo;
+      </button>
+    </div>
 
-  <div class="mode-overlay" id="modeOverlay">
-    <div class="mode-card">
-      <div id="modeSelectBlock">
-        <h3>Select mode</h3>
-        <p>Play locally or online via Firebase.</p>
-        <div class="actions">
-          <button id="selectLocal" class="primary">Local</button>
-          <button id="selectMp">Multiplayer</button>
-        </div>
-      </div>
-      <div id="mpConfig" style="display:none;">
-        <p style="margin:6px 0;">Enter your prefs and create or join a room.</p>
-        <div class="prefs-form">
-          <div class="name-and-color">
-          <label>Name <input id="prefName" placeholder="Player" /></label>
-            <span id="prefColorSwatch" class="color-display-swatch"></span>        
-          </div>          
-          <label>Controls
-            <select id="prefControls">
-              <option value="ArrowLeft / ArrowRight">ArrowLeft / ArrowRight</option>
-              <option value="W / S">W / S</option>
-              <option value="A / D">A / D</option>
-              <option value="J / L">J / L</option>
-              <option value="Mouse Left / Mouse Right">Mouse Left / Mouse Right</option>
-              <option value="Num4 / Num6">Num4 / Num6</option>
-            </select>
-          </label>
-        </div>
-        <div class="multiplayer-panel" style="margin-top:10px;">
-          <label>Room ID</label>
-          <div class="room-row">
-            <input id="roomIdInput" placeholder="room-xxxxxx" />
-            <button id="createRoomBtn">Create</button>
-            <button id="joinRoomBtn">Join</button>
+    <div class="mode-overlay" id="modeOverlay">
+      <div class="mode-card">
+        <div id="modeSelectBlock">
+          <h3>Select mode</h3>
+          <p>Play locally or online via Firebase.</p>
+          <div class="actions">
+            <button id="selectLocal" class="primary">Local</button>
+            <button id="selectMp">Multiplayer</button>
           </div>
-          <small id="mpStatus">Offline</small>
-          <small id="mpLatency">Latency: --</small>
-          <small id="mpRoomInfo">Room: --</small>
         </div>
-        <div id="mpPlayerList" class="mp-player-list"></div>
-        <div class="actions lobby-actions">
-          <button id="mpReadyBtn" class="primary" disabled>Ready Up</button>
-          <button id="mpStartBtn" class="primary" disabled style="display:none;">Start Game</button>
+        <div id="mpConfig" style="display: none">
+          <p style="margin: 6px 0">
+            Enter your prefs and create or join a room.
+          </p>
+          <div class="prefs-form">
+            <div class="name-and-color">
+              <label>Name <input id="prefName" placeholder="Player" /></label>
+              <span id="prefColorSwatch" class="color-display-swatch"></span>
+            </div>
+            <label
+              >Controls
+              <select id="prefControls">
+                <option value="ArrowLeft / ArrowRight">
+                  ArrowLeft / ArrowRight
+                </option>
+                <option value="W / S">W / S</option>
+                <option value="A / D">A / D</option>
+                <option value="J / L">J / L</option>
+                <option value="Mouse Left / Mouse Right">
+                  Mouse Left / Mouse Right
+                </option>
+                <option value="Num4 / Num6">Num4 / Num6</option>
+              </select>
+            </label>
+          </div>
+          <div class="multiplayer-panel" style="margin-top: 10px">
+            <label>Room ID</label>
+            <div class="room-row">
+              <input id="roomIdInput" placeholder="room-xxxxxx" />
+              <button id="createRoomBtn">Create</button>
+              <button id="joinRoomBtn">Join</button>
+            </div>
+            <small id="mpStatus">Offline</small>
+            <small id="mpLatency">Latency: --</small>
+            <small id="mpRoomInfo">Room: --</small>
+          </div>
+          <div id="mpPlayerList" class="mp-player-list"></div>
+          <div class="actions lobby-actions">
+            <button id="mpReadyBtn" class="primary" disabled>Ready Up</button>
+            <button
+              id="mpStartBtn"
+              class="primary"
+              disabled
+              style="display: none"
+            >
+              Start Game
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-<script type="module" src="script.js"></script>
-</body>
+    <script type="module" src="script.js"></script>
+  </body>
 </html>

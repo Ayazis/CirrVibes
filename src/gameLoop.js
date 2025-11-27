@@ -1,17 +1,20 @@
-import { FIXED_TIMESTEP_MS, TRAIL_WIDTH } from './constants.js';
-import { computeViewBounds, generateRandomStartingPosition } from './viewUtils.js';
-import { checkTrailCollision } from './collision.js';
-import { Trail } from './trail.js';
+import { FIXED_TIMESTEP_MS, TRAIL_WIDTH } from "./constants.js";
+import {
+  computeViewBounds,
+  generateRandomStartingPosition,
+} from "./viewUtils.js";
+import { checkTrailCollision } from "./collision.js";
+import { Trail } from "./trail.js";
 
 function updatePlayer(player, deltaSeconds, state) {
   if (!player || player.active === false || !player.isAlive) return;
 
   const turnAmount = player.turnSpeed * deltaSeconds;
   if (player.isTurningLeft) {
-    player.snakeDirection = (player.snakeDirection + turnAmount);
+    player.snakeDirection = player.snakeDirection + turnAmount;
   }
   if (player.isTurningRight) {
-    player.snakeDirection = (player.snakeDirection - turnAmount);
+    player.snakeDirection = player.snakeDirection - turnAmount;
   }
 
   player.snakeDirection = ((player.snakeDirection % 360) + 360) % 360;
@@ -24,7 +27,12 @@ function updatePlayer(player, deltaSeconds, state) {
   const newY = player.snakePosition.y + deltaY;
 
   const bounds = computeViewBounds();
-  if (newX < bounds.minX || newX > bounds.maxX || newY < bounds.minY || newY > bounds.maxY) {
+  if (
+    newX < bounds.minX ||
+    newX > bounds.maxX ||
+    newY < bounds.minY ||
+    newY > bounds.maxY
+  ) {
     player.isAlive = false;
     awardPointsForDeath(player, state);
     return;
@@ -37,7 +45,12 @@ function updatePlayer(player, deltaSeconds, state) {
   }
 
   const grid = state?.occupancyGrid;
-  const tailScratch = player._trailScratch || (player._trailScratch = { x: player.snakePosition.x, y: player.snakePosition.y });
+  const tailScratch =
+    player._trailScratch ||
+    (player._trailScratch = {
+      x: player.snakePosition.x,
+      y: player.snakePosition.y,
+    });
   const lastPoint = player.trail.peekLast(tailScratch) || tailScratch;
 
   player.snakePosition.x = newX;
@@ -45,7 +58,15 @@ function updatePlayer(player, deltaSeconds, state) {
   player.trail.push(newX, newY);
 
   if (grid) {
-    grid.occupySegment(lastPoint.x, lastPoint.y, newX, newY, player.id, state.frameCounter, TRAIL_WIDTH);
+    grid.occupySegment(
+      lastPoint.x,
+      lastPoint.y,
+      newX,
+      newY,
+      player.id,
+      state.frameCounter,
+      TRAIL_WIDTH,
+    );
   }
 }
 
@@ -61,7 +82,10 @@ function awardPointsForDeath(deadPlayer, state) {
         p.score = (Number(p.score) || 0) + 1;
       }
     });
-    try { if (typeof window.updateControlsInfoUI === 'function') window.updateControlsInfoUI(state.players); } catch (e) {}
+    try {
+      if (typeof window.updateControlsInfoUI === "function")
+        window.updateControlsInfoUI(state.players);
+    } catch (e) {}
   } catch (e) {
     // silent
   }
@@ -77,7 +101,7 @@ export function updateSnake(deltaSeconds, state, { onWinner, onDraw } = {}) {
     updatePlayer(playersArr[i], deltaSeconds, state);
   }
 
-  const alive = playersArr.filter(p => p && p.isAlive);
+  const alive = playersArr.filter((p) => p && p.isAlive);
   if (alive.length === 1 && !state.winnerShown) {
     state.winnerShown = true;
     state.paused = true;

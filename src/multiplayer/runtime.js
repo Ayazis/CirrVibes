@@ -1,5 +1,5 @@
-import { createLocalRuntime } from './localRuntime.js';
-import { createWebMultiplayer } from './webMultiplayer.js';
+import { createLocalRuntime } from "./localRuntime.js";
+import { createWebMultiplayer } from "./webMultiplayer.js";
 
 export function createMultiplayerRuntime({ gameState }) {
   const localRuntime = createLocalRuntime({ gameState });
@@ -10,6 +10,6 @@ export function createMultiplayerRuntime({ gameState }) {
     resetGame: () => webMultiplayer.resetGame(),
     forceReset: () => webMultiplayer.forceReset(),
     renderControls: () => webMultiplayer.renderControls(),
-    setStatus: (text) => webMultiplayer.setStatus(text)
+    setStatus: (text) => webMultiplayer.setStatus(text),
   };
 }

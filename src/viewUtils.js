@@ -1,7 +1,7 @@
-import { VIEW_SIZE, DEFAULT_ASPECT } from './constants.js';
+import { VIEW_SIZE, DEFAULT_ASPECT } from "./constants.js";
 
 export function getCanvasAspect() {
-  const canvas = document.getElementById('gameCanvas');
+  const canvas = document.getElementById("gameCanvas");
   if (canvas && canvas.height) {
     return canvas.width / canvas.height;
   }
@@ -20,7 +20,7 @@ export function computeViewBounds() {
     minX: -horizontalBoundary,
     maxX: horizontalBoundary,
     minY: -verticalBoundary,
-    maxY: verticalBoundary
+    maxY: verticalBoundary,
   };
 }
 

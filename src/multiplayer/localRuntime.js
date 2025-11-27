@@ -1,15 +1,15 @@
-import { updateControlsInfoUI as renderControlsInfo } from '../ui/controlsInfo.js';
-import { attachInputHandlers } from '../input.js';
-import { generateRandomStartingPosition } from '../viewUtils.js';
-import { Trail } from '../trail.js';
-import { cssFromColor, rgbaFromHex } from './colorUtils.js';
+import { updateControlsInfoUI as renderControlsInfo } from "../ui/controlsInfo.js";
+import { attachInputHandlers } from "../input.js";
+import { generateRandomStartingPosition } from "../viewUtils.js";
+import { Trail } from "../trail.js";
+import { cssFromColor, rgbaFromHex } from "./colorUtils.js";
 
 export function createLocalRuntime({ gameState }) {
   let detachInput = null;
   let context = {
-    mpMode: 'local',
+    mpMode: "local",
     hasRoom: false,
-    roomPlayerId: null
+    roomPlayerId: null,
   };
 
   function setContext(partial) {
@@ -22,10 +22,18 @@ export function createLocalRuntime({ gameState }) {
     const local = players[0];
     if (local) list.push(local);
     if (!players.length) return list;
-    if (!context.hasRoom && context.mpMode === 'local') {
-      players.slice(1).forEach((p) => { if (p) list.push(p); });
-    } else if (context.hasRoom || context.mpMode === 'host' || context.mpMode === 'guest') {
-      players.slice(1).forEach((p) => { if (p && p.clientId) list.push(p); });
+    if (!context.hasRoom && context.mpMode === "local") {
+      players.slice(1).forEach((p) => {
+        if (p) list.push(p);
+      });
+    } else if (
+      context.hasRoom ||
+      context.mpMode === "host" ||
+      context.mpMode === "guest"
+    ) {
+      players.slice(1).forEach((p) => {
+        if (p && p.clientId) list.push(p);
+      });
     }
     return list;
   }
@@ -35,14 +43,16 @@ export function createLocalRuntime({ gameState }) {
   }
 
   function renderRoster() {
-    const el = document.getElementById('roster');
+    const el = document.getElementById("roster");
     if (!el) return;
-    const cards = visiblePlayers().map((p) => {
-      const color = cssFromColor(p.color);
-      const name = p.name || `Player ${p.id}`;
-      const controls = p.controls || '';
-      return `<div class="card"><h4><span class="swatch" style="background:${color};"></span>${name}</h4><div>${controls}</div></div>`;
-    }).join('');
+    const cards = visiblePlayers()
+      .map((p) => {
+        const color = cssFromColor(p.color);
+        const name = p.name || `Player ${p.id}`;
+        const controls = p.controls || "";
+        return `<div class="card"><h4><span class="swatch" style="background:${color};"></span>${name}</h4><div>${controls}</div></div>`;
+      })
+      .join("");
     el.innerHTML = cards;
   }
 
@@ -61,11 +71,11 @@ export function createLocalRuntime({ gameState }) {
       trail: new Trail(1024, start.x, start.y),
       isTurningLeft: false,
       isTurningRight: false,
-      color: rgbaFromHex(cfg?.color || '#66ccff'),
-      controls: cfg?.controls || 'ArrowLeft / ArrowRight',
+      color: rgbaFromHex(cfg?.color || "#66ccff"),
+      controls: cfg?.controls || "ArrowLeft / ArrowRight",
       score: cfg?.score || 0,
       _deathProcessed: false,
-      _lastRemoteInputSeq: null
+      _lastRemoteInputSeq: null,
     };
   }
 
@@ -92,7 +102,10 @@ export function createLocalRuntime({ gameState }) {
 
   function rebuildOccupancy() {
     if (gameState?.occupancyGrid) {
-      gameState.occupancyGrid.rebuildFromTrails(gameState.players.filter(Boolean), gameState.frameCounter || 0);
+      gameState.occupancyGrid.rebuildFromTrails(
+        gameState.players.filter(Boolean),
+        gameState.frameCounter || 0,
+      );
     }
   }
 
@@ -109,7 +122,7 @@ export function createLocalRuntime({ gameState }) {
 
   function deactivateInactiveSlots() {
     const players = gameState?.players || [];
-    const isNet = context.mpMode === 'host' || context.mpMode === 'guest';
+    const isNet = context.mpMode === "host" || context.mpMode === "guest";
     players.forEach((p, idx) => {
       if (!p) return;
       if (idx === 0) {
@@ -148,7 +161,9 @@ export function createLocalRuntime({ gameState }) {
     p.name = prefs.name || p.name;
     p.controls = prefs.controls || p.controls;
     if (prefs.color) {
-      p.color = Array.isArray(prefs.color) ? prefs.color : rgbaFromHex(prefs.color);
+      p.color = Array.isArray(prefs.color)
+        ? prefs.color
+        : rgbaFromHex(prefs.color);
     }
     updateControls();
     renderRoster();
@@ -156,15 +171,22 @@ export function createLocalRuntime({ gameState }) {
 
   function assignRemotePlayers(remotePlayers) {
     if (!gameState) return 0;
-    if (context.mpMode === 'host' || context.mpMode === 'guest') {
+    if (context.mpMode === "host" || context.mpMode === "guest") {
       gameState.players = gameState.players.slice(0, 1);
     }
-    const list = Object.values(remotePlayers || {}).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    const list = Object.values(remotePlayers || {}).sort(
+      (a, b) => (a.joinedAt || 0) - (b.joinedAt || 0),
+    );
     let slot = 1;
     list.forEach((rp) => {
       if (rp.id === context.roomPlayerId) return;
       if (slot >= 4) return;
-      const cfg = { name: rp.name, color: rp.color, controls: rp.controls, clientId: rp.id || rp.playerId };
+      const cfg = {
+        name: rp.name,
+        color: rp.color,
+        controls: rp.controls,
+        clientId: rp.id || rp.playerId,
+      };
       const player = ensurePlayerSlot(slot, cfg);
       if (player) player._lastRemoteInputSeq = null;
       slot += 1;
@@ -191,18 +213,26 @@ export function createLocalRuntime({ gameState }) {
         player.clientId = info.clientId;
       }
       if (!player) {
-        const targetIdx = typeof info.index === 'number' ? info.index : idx;
+        const targetIdx = typeof info.index === "number" ? info.index : idx;
         player = ensurePlayerSlot(targetIdx, { name: info.name });
         if (!player) return;
         player.clientId = info.clientId || player.clientId;
       }
       if (info.name) player.name = info.name;
       if (info.controls) player.controls = info.controls;
-      if (info.color) player.color = Array.isArray(info.color) ? info.color : rgbaFromHex(info.color);
-      if (typeof info.x === 'number') player.snakePosition.x = info.x;
-      if (typeof info.y === 'number') player.snakePosition.y = info.y;
-      if (typeof info.direction === 'number') player.snakeDirection = info.direction;
-      player.trail = new Trail(1024, player.snakePosition.x, player.snakePosition.y);
+      if (info.color)
+        player.color = Array.isArray(info.color)
+          ? info.color
+          : rgbaFromHex(info.color);
+      if (typeof info.x === "number") player.snakePosition.x = info.x;
+      if (typeof info.y === "number") player.snakePosition.y = info.y;
+      if (typeof info.direction === "number")
+        player.snakeDirection = info.direction;
+      player.trail = new Trail(
+        1024,
+        player.snakePosition.x,
+        player.snakePosition.y,
+      );
       player.isAlive = true;
       player.isTurningLeft = false;
       player.isTurningRight = false;
@@ -217,10 +247,10 @@ export function createLocalRuntime({ gameState }) {
       gameState.paused = false;
     }
     refreshPlayerUi();
-    logPlayerPositions(snapshot.key || 'applied');
+    logPlayerPositions(snapshot.key || "applied");
   }
 
-  function logPlayerPositions(contextLabel = 'snapshot') {
+  function logPlayerPositions(contextLabel = "snapshot") {
     if (!gameState?.players) return;
     const data = gameState.players.filter(Boolean).map((p, idx) => ({
       slot: idx,
@@ -228,28 +258,34 @@ export function createLocalRuntime({ gameState }) {
       clientId: p.clientId,
       x: Number(p.snakePosition?.x ?? 0).toFixed(2),
       y: Number(p.snakePosition?.y ?? 0).toFixed(2),
-      direction: Number(p.snakeDirection ?? 0).toFixed(2)
+      direction: Number(p.snakeDirection ?? 0).toFixed(2),
     }));
     console.log(`[spawn:${contextLabel}]`, data);
   }
 
   function attachDefaultInputHandlers() {
     if (detachInput) {
-      try { detachInput(); } catch (e) {}
+      try {
+        detachInput();
+      } catch (e) {}
     }
     detachInput = attachInputHandlers(gameState);
   }
 
   function attachCustomInputHandlers(config) {
     if (detachInput) {
-      try { detachInput(); } catch (e) {}
+      try {
+        detachInput();
+      } catch (e) {}
     }
     detachInput = attachInputHandlers(config);
   }
 
   function releaseInputHandlers() {
     if (detachInput) {
-      try { detachInput(); } catch (e) {}
+      try {
+        detachInput();
+      } catch (e) {}
     }
     detachInput = null;
   }
@@ -276,6 +312,6 @@ export function createLocalRuntime({ gameState }) {
     attachCustomInputHandlers,
     releaseInputHandlers,
     handleReset,
-    getPlayers: () => gameState?.players || []
+    getPlayers: () => gameState?.players || [],
   };
 }

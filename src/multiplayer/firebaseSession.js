@@ -1,4 +1,7 @@
-import { RoomClient, createRoomId as createFirebaseRoomId } from '../roomClient.js';
+import {
+  RoomClient,
+  createRoomId as createFirebaseRoomId,
+} from "../roomClient.js";
 
 export function createFirebaseSession(initialCallbacks = {}) {
   let client = null;
@@ -11,18 +14,18 @@ export function createFirebaseSession(initialCallbacks = {}) {
 
   function invoke(name, payload) {
     const fn = callbacks[name];
-    if (typeof fn === 'function') fn(payload);
+    if (typeof fn === "function") fn(payload);
   }
 
   function attachListeners() {
     if (!client) return;
-    client.listenPlayers((players) => invoke('onPlayersUpdate', players));
-    client.listenMeta((meta) => invoke('onMetaUpdate', meta));
-    client.listenInputs((inputs) => invoke('onInputIntent', inputs));
+    client.listenPlayers((players) => invoke("onPlayersUpdate", players));
+    client.listenMeta((meta) => invoke("onMetaUpdate", meta));
+    client.listenInputs((inputs) => invoke("onInputIntent", inputs));
   }
 
   async function connect(roomId, playerInfo, isHost) {
-    role = isHost ? 'host' : 'guest';
+    role = isHost ? "host" : "guest";
     client = new RoomClient({ roomId, playerInfo, isHost });
     try {
       await client.joinRoom();
@@ -57,6 +60,6 @@ export function createFirebaseSession(initialCallbacks = {}) {
     isConnected: () => !!client,
     getPlayerId: () => client?.playerId || null,
     getRole: () => role,
-    generateRoomId: () => createFirebaseRoomId()
+    generateRoomId: () => createFirebaseRoomId(),
   };
 }

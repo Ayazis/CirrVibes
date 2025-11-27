@@ -1,4 +1,9 @@
-import { VIEW_SIZE, MAX_CELL_STAMPS, TRAIL_WIDTH, TRAIL_SAFE_FRAMES } from './constants.js';
+import {
+  VIEW_SIZE,
+  MAX_CELL_STAMPS,
+  TRAIL_WIDTH,
+  TRAIL_SAFE_FRAMES,
+} from "./constants.js";
 
 // Spatial hash for quick trail collision checks.
 export class OccupancyGrid {
@@ -38,7 +43,11 @@ export class OccupancyGrid {
   }
 
   updateBounds(minX, maxX, minY, maxY, players, frame = 0) {
-    const changed = minX !== this.minX || maxX !== this.maxX || minY !== this.minY || maxY !== this.maxY;
+    const changed =
+      minX !== this.minX ||
+      maxX !== this.maxX ||
+      minY !== this.minY ||
+      maxY !== this.maxY;
     if (!changed) return;
     this.minX = minX;
     this.maxX = maxX;
@@ -75,7 +84,13 @@ export class OccupancyGrid {
   }
 
   occupySegment(x1, y1, x2, y2, playerId, frame, radius = TRAIL_WIDTH) {
-    if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
+    if (
+      !Number.isFinite(x1) ||
+      !Number.isFinite(y1) ||
+      !Number.isFinite(x2) ||
+      !Number.isFinite(y2)
+    )
+      return;
     const dx = x2 - x1;
     const dy = y2 - y1;
     const length = Math.hypot(dx, dy);
@@ -126,7 +141,7 @@ export class OccupancyGrid {
     const nearestY = Math.max(cellMinY, Math.min(y, cellMaxY));
     const dx = x - nearestX;
     const dy = y - nearestY;
-    return (dx * dx + dy * dy) <= radius * radius;
+    return dx * dx + dy * dy <= radius * radius;
   }
 
   checkCollision(x, y, radius, playerId, frame) {
@@ -143,7 +158,11 @@ export class OccupancyGrid {
       const slot = start + i;
       const owner = this.stampOwner[slot];
       const stampRadius = this.stampRadius[slot];
-      if (owner === playerId && frame - this.stampAge[slot] <= this.ownSafeFrames) continue;
+      if (
+        owner === playerId &&
+        frame - this.stampAge[slot] <= this.ownSafeFrames
+      )
+        continue;
       const dx = x - this.stampX[slot];
       const dy = y - this.stampY[slot];
       const distSq = dx * dx + dy * dy;
