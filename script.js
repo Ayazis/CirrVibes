@@ -6,13 +6,11 @@ import { createMultiplayerRuntime } from './src/multiplayer/runtime.js';
 
 function detectTouchCapabilities() {
   if (typeof window === 'undefined') return { isTouch: false };
-  const nav = window.navigator || {};
-  const touchPoints = nav.maxTouchPoints || nav.msMaxTouchPoints || 0;
+  const nav = window.navigator || {};  
   const coarsePointer = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
-  const touchEvents = 'ontouchstart' in window;
+  const touchEvents = 'ontouchstart' in window;  
   return {
-    //isTouch: Boolean(touchPoints || coarsePointer || touchEvents)
-    isTouch: true
+    isTouch: Boolean( coarsePointer || touchEvents)    
   };
 }
 
