@@ -52,6 +52,34 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     localColorHex: null,
   };
 
+  function stripRoomPrefix(value = "") {
+    if (!value) return "";
+    let trimmed = value.trim();
+    let lower = trimmed.toLowerCase();
+    while (lower.startsWith("room-")) {
+      trimmed = trimmed.slice(5);
+      lower = lower.slice(5);
+    }
+    return trimmed;
+  }
+
+  function normalizeRoomId(value) {
+    if (typeof value !== "string") return "";
+    let cleaned = value.trim().toLowerCase();
+    if (!cleaned) return "";
+    while (cleaned.startsWith("room-")) {
+      cleaned = cleaned.slice(5);
+    }
+    if (!cleaned) return "";
+    return `room-${cleaned}`;
+  }
+
+  function displayRoomCode(roomId) {
+    if (!roomId) return "";
+    const stripped = stripRoomPrefix(roomId);
+    return stripped || roomId;
+  }
+
   function randomNameSuffix(length = 2) {
     let out = "";
     for (let i = 0; i < length; i += 1) {
@@ -111,8 +139,9 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function updateRoomInfo(roomId, role) {
     const el = document.getElementById("mpRoomInfo");
     const display = document.getElementById("roomDisplay");
-    const text = roomId
-      ? `Room: ${roomId}${role ? ` (${role})` : ""}`
+    const friendly = roomId ? displayRoomCode(roomId) : null;
+    const text = friendly
+      ? `Room: ${friendly}${role ? ` (${role})` : ""}`
       : "Room: --";
     if (el) el.textContent = text;
     if (display) display.textContent = text;
@@ -773,7 +802,12 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     return key;
   }
 
-  async function startHost(roomId) {
+  async function startHost(roomIdInput) {
+    const roomId = normalizeRoomId(roomIdInput);
+    if (!roomId) {
+      updateMpError("Enter a valid room id to host");
+      return;
+    }
     state.mpMode = "host";
     state.inputSeq = 0;
     state.hasSelectedMultiplayer = true;
@@ -783,7 +817,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     try {
       updateMpStatus("Connecting as host...");
       await firebaseSession.connectHost(roomId, info);
-      updateMpStatus(`Hosting ${roomId}`);
+      updateMpStatus(`Hosting ${displayRoomCode(roomId)}`);
       updateRoomInfo(roomId, "host");
     } catch (e) {
       updateMpError(`Host join failed: ${e?.message || e}`);
@@ -834,7 +868,12 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     if (state.loopController) state.loopController.setCallbacks(callbacks);
   }
 
-  async function startGuest(roomId) {
+  async function startGuest(roomIdInput) {
+    const roomId = normalizeRoomId(roomIdInput);
+    if (!roomId) {
+      updateMpError("Enter a valid room id to join");
+      return;
+    }
     state.mpMode = "guest";
     state.inputSeq = 0;
     state.hasSelectedMultiplayer = true;
@@ -844,7 +883,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     try {
       updateMpStatus("Joining room...");
       await firebaseSession.connectGuest(roomId, info);
-      updateMpStatus(`Joined ${roomId}`);
+      updateMpStatus(`Joined ${displayRoomCode(roomId)}`);
       updateRoomInfo(roomId, "guest");
     } catch (e) {
       updateMpError(`Join failed: ${e?.message || e}`);
@@ -881,8 +920,9 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     };
 
     createBtn.addEventListener("click", async () => {
-      const newId = firebaseSession.generateRoomId();
-      input.value = newId;
+      const generated = firebaseSession.generateRoomId();
+      const newId = normalizeRoomId(generated) || generated;
+      input.value = displayRoomCode(newId);
       ensurePrefs();
       await cleanupRoomClient();
       resetLobbyState();
@@ -891,8 +931,12 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     });
 
     joinBtn.addEventListener("click", async () => {
-      const roomId = input.value.trim();
-      if (!roomId) return;
+      const roomId = normalizeRoomId(input.value);
+      if (!roomId) {
+        updateMpError("Enter a room code to join");
+        return;
+      }
+      input.value = displayRoomCode(roomId);
       ensurePrefs();
       await cleanupRoomClient();
       resetLobbyState();
