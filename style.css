@@ -400,6 +400,10 @@ canvas {
   display: none;
   gap: 12px;
   z-index: 1100;
+  user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;    
 }
 
 .touch-controls--visible {
@@ -417,6 +421,14 @@ canvas {
   font-weight: 700;
   cursor: pointer;
   touch-action: none;
+  -webkit-appearance: none;
+  appearance: none;
+  overflow: hidden; /* ensure hover/focus effects stay circular */
+  background-clip: padding-box;
+  -webkit-tap-highlight-color: transparent;
+  outline: none; /* avoid default square focus outline around circular controls */
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+  position: relative;
   transition:
     transform 0.1s ease,
     background 0.1s ease;
@@ -426,6 +438,10 @@ canvas {
 .touch-btn.touch-active {
   transform: scale(0.95);
   background: rgba(255, 255, 255, 0.12);
+}
+
+.touch-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
 }
 
 @media (max-width: 640px) {
