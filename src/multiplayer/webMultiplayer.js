@@ -241,6 +241,15 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     localRuntime.attachDefaultInputHandlers();
   }
 
+  function handleLocalConfigStart(event) {
+    const roster = event?.detail?.players;
+    if (!Array.isArray(roster) || roster.length < 2) return;
+    const isMultiplayerMode =
+      state.mpMode === "host" || state.mpMode === "guest";
+    if (isMultiplayerMode || state.hasSelectedMultiplayer) return;
+    localRuntime.applyLocalRoster(roster);
+  }
+
   function applyLocalPrefsFromInputs() {
     if (!state.capturePrefs) return state.pendingPrefs;
     state.pendingPrefs = state.capturePrefs();
@@ -948,6 +957,12 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     localRuntime.refreshPlayerUi();
     localRuntime.attachDefaultInputHandlers();
     startLocalLoop();
+    if (typeof window !== "undefined") {
+      window.addEventListener(
+        "local-player-config-start",
+        handleLocalConfigStart,
+      );
+    }
     document.addEventListener("DOMContentLoaded", () => {
       wireMultiplayerUI();
       initModeOverlay();

@@ -197,6 +197,24 @@ export function createLocalRuntime({ gameState }) {
     return slot;
   }
 
+  function applyLocalRoster(rosterConfigs = []) {
+    if (!gameState) return;
+    if (!Array.isArray(rosterConfigs) || rosterConfigs.length === 0) return;
+    const configs = rosterConfigs.slice(0, 4);
+    const updatedPlayers = configs.map((cfg, idx) =>
+      createPlayerFromConfig(cfg, idx),
+    );
+    gameState.players = updatedPlayers;
+    gameState.player1 = updatedPlayers[0] || null;
+    gameState.player2 = updatedPlayers[1] || null;
+    gameState.frameCounter = 0;
+    gameState.gameOverLogged = false;
+    gameState.winnerShown = false;
+    rebuildOccupancy();
+    refreshPlayerUi();
+    attachDefaultInputHandlers();
+  }
+
   function playerByClientId(clientId) {
     if (!clientId) return null;
     return (gameState?.players || []).find((p) => p && p.clientId === clientId);
@@ -302,6 +320,7 @@ export function createLocalRuntime({ gameState }) {
     updateControls,
     renderRoster,
     applyLocalPrefs,
+    applyLocalRoster,
     assignRemotePlayers,
     applySpawnSnapshot,
     logPlayerPositions,

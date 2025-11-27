@@ -185,7 +185,7 @@ export function openPlayerConfigMenu() {
     const description = document.createElement("div");
     description.className = "muted";
     description.textContent =
-      "Add or edit players and controls. Changes are persisted to localStorage and applied after reloading.";
+      "Add or edit players and controls. Settings save locally and apply immediately when you start.";
 
     const list = document.createElement("div");
     list.id = "playerList";
@@ -271,19 +271,29 @@ export function openPlayerConfigMenu() {
 
     const startBtn = document.createElement("button");
     startBtn.className = "primary";
-    startBtn.textContent = "Save & Reload";
+    startBtn.textContent = "Start";
     startBtn.addEventListener("click", () => {
+      const rosterPayload = players.map((p) => ({
+        name: p.name,
+        color: p.color,
+        controls: p.controls,
+      }));
       try {
         saveFirstStartDone();
-        savePlayerConfig(
-          players.map((p) => ({
-            name: p.name,
-            color: p.color,
-            controls: p.controls,
-          })),
-        );
+        savePlayerConfig(rosterPayload);
       } catch (e) {
         console.warn("Could not save player settings:", e);
+      }
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("local-player-config-start", {
+              detail: { players: rosterPayload },
+            }),
+          );
+        }
+      } catch (e) {
+        console.warn("Could not notify runtime about player config:", e);
       }
       try {
         window.playerConfigMenuOpen = false;
@@ -294,8 +304,12 @@ export function openPlayerConfigMenu() {
         if (el && el.parentNode) el.parentNode.removeChild(el);
       } catch (e) {}
       try {
-        location.reload();
-      } catch (e) {}
+        if (typeof window !== "undefined" && window.forceReset) {
+          window.forceReset();
+        }
+      } catch (e) {
+        console.warn("Failed to start game after config update:", e);
+      }
     });
 
     const closeBtn = document.createElement("button");
