@@ -25,11 +25,12 @@ export const setupCanvas = (canvasId) => {
     throw new Error(`Canvas with id "${canvasId}" was not found`);
   }
 
-  // Size the canvas relative to the viewport but keep a sensible maximum for desktops
-  canvas.style.width = "80vw";
-  canvas.style.height = "80vh";
-  canvas.style.maxWidth = "960px";
-  canvas.style.maxHeight = "540px";
+  // Size the canvas relative to the viewport but keep a sensible maximum for desktops.
+  // Values are driven by CSS custom properties so media queries can adapt sizing.
+  canvas.style.width = "var(--canvas-width)";
+  canvas.style.height = "var(--canvas-height)";
+  canvas.style.maxWidth = "var(--canvas-max-width)";
+  canvas.style.maxHeight = "var(--canvas-max-height)";
   canvas.style.display = "block";
 
   resizeCanvasToDisplaySize(canvas);
