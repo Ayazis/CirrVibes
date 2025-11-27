@@ -1,9 +1,14 @@
 // Setup for the game canvas with Hi-DPI awareness
+const BASE_CANVAS_WIDTH = 960;
+const BASE_CANVAS_HEIGHT = 540;
+
 export const resizeCanvasToDisplaySize = (canvas) => {
   if (!canvas) return false;
-  const dpr = window.devicePixelRatio || 1;
-  const displayWidth = Math.floor(canvas.clientWidth * dpr);
-  const displayHeight = Math.floor(canvas.clientHeight * dpr);
+
+  // Keep the drawing buffer at a fixed resolution so all clients share
+  // identical coordinates regardless of viewport or zoom.
+  const displayWidth = BASE_CANVAS_WIDTH;
+  const displayHeight = BASE_CANVAS_HEIGHT;
   let resized = false;
 
   if (canvas.width !== displayWidth) {
@@ -26,11 +31,12 @@ export const setupCanvas = (canvasId) => {
   }
 
   // Size the canvas relative to the viewport but keep a sensible maximum for desktops.
-  // Values are driven by CSS custom properties so media queries can adapt sizing.
+  // Display size is handled by CSS, while the drawing buffer remains fixed for
+  // consistent multiplayer coordinates across clients.
   canvas.style.width = "var(--canvas-width)";
-  canvas.style.height = "var(--canvas-height)";
+  canvas.style.height = "auto";
   canvas.style.maxWidth = "var(--canvas-max-width)";
-  canvas.style.maxHeight = "var(--canvas-max-height)";
+  canvas.style.maxHeight = "none";
   canvas.style.display = "block";
 
   resizeCanvasToDisplaySize(canvas);
