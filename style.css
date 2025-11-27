@@ -394,20 +394,29 @@ canvas {
 
 .touch-controls {
   position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
   display: none;
   gap: 12px;
+  padding: 0 32px;
   z-index: 1100;
   user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;    
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  pointer-events: none;
 }
 
 .touch-controls--visible {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.touch-controls .touch-btn {
+  pointer-events: auto;
 }
 
 .touch-btn {
@@ -446,7 +455,7 @@ canvas {
 
 @media (max-width: 640px) {
   .touch-controls {
-    bottom: 16px;
+    padding: 0 16px;
     gap: 8px;
   }
   .touch-btn {
@@ -454,4 +463,48 @@ canvas {
     height: 60px;
     font-size: 26px;
   }
+}
+
+@media (max-height: 480px) {
+  .touch-controls {
+    padding: 0 12px;
+  }
+  .touch-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+  }
+}
+
+@media (pointer: coarse) and (orientation: portrait) {
+  .touch-controls.touch-controls--visible {
+    display: none;
+  }
+}
+
+.orientation-warning {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  z-index: 2000;
+}
+
+.orientation-warning--visible {
+  display: flex;
+}
+
+.orientation-warning__card {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 320px;
+  background: rgba(0, 0, 0, 0.85);
+  font-size: 16px;
+  line-height: 1.4;
 }

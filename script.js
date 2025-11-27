@@ -29,9 +29,53 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (window.gameCapabilities?.isTouch) {
     const touchControls = document.getElementById("touchControls");
-    if (touchControls) {
-      touchControls.classList.add("touch-controls--visible");
-      touchControls.setAttribute("aria-hidden", "false");
+    const orientationWarning = document.getElementById(
+      "orientationWarning",
+    );
+
+    const orientationMedia = window.matchMedia
+      ? window.matchMedia("(orientation: landscape)")
+      : null;
+
+    const checkLandscape = () => {
+      if (orientationMedia) return orientationMedia.matches;
+      return window.innerWidth > window.innerHeight;
+    };
+
+    const updateTouchUI = () => {
+      const isLandscape = checkLandscape();
+
+      if (touchControls) {
+        if (isLandscape) {
+          touchControls.classList.add("touch-controls--visible");
+          touchControls.setAttribute("aria-hidden", "false");
+        } else {
+          touchControls.classList.remove("touch-controls--visible");
+          touchControls.setAttribute("aria-hidden", "true");
+        }
+      }
+
+      if (orientationWarning) {
+        orientationWarning.classList.toggle(
+          "orientation-warning--visible",
+          !isLandscape,
+        );
+        orientationWarning.setAttribute(
+          "aria-hidden",
+          isLandscape ? "true" : "false",
+        );
+      }
+    };
+
+    updateTouchUI();
+
+    if (orientationMedia?.addEventListener) {
+      orientationMedia.addEventListener("change", updateTouchUI);
+    } else if (orientationMedia?.addListener) {
+      orientationMedia.addListener(updateTouchUI);
     }
+
+    window.addEventListener("orientationchange", updateTouchUI);
+    window.addEventListener("resize", updateTouchUI);
   }
 });
