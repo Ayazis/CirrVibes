@@ -139,12 +139,46 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function updateRoomInfo(roomId, role) {
     const el = document.getElementById("mpRoomInfo");
     const display = document.getElementById("roomDisplay");
+    const copyBtn = document.getElementById("mpRoomCopyBtn");
     const friendly = roomId ? displayRoomCode(roomId) : null;
-    const text = friendly
-      ? `Room: ${friendly}${role ? ` (${role})` : ""}`
-      : "Room: --";
+    const copyCode = roomId ? stripRoomPrefix(roomId) : "";
+    const text = friendly ? `${friendly}` : "--";
     if (el) el.textContent = text;
     if (display) display.textContent = text;
+    if (copyBtn) {
+      copyBtn.disabled = !copyCode;
+      copyBtn.dataset.roomCode = copyCode || "";
+      copyBtn.title = copyCode ? `Copy ${copyCode}` : "Copy room code";
+      if (!copyCode) copyBtn.textContent = "Copy Code";
+    }
+  }
+
+  async function copyTextToClipboard(value) {
+    if (!value) return false;
+    const text = String(value);
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (err) {
+      console.warn("Clipboard API copy failed", err);
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const result = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return result;
+    } catch (err) {
+      console.warn("execCommand copy fallback failed", err);
+      return false;
+    }
   }
 
   function updateLatency(ms) {
@@ -327,6 +361,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function setModeOverlayState(mode) {
     const overlay = document.getElementById("modeOverlay");
     const selectBlock = document.getElementById("modeSelectBlock");
+    const roomPrompt = document.getElementById("mpRoomPrompt");
     const mpConfig = document.getElementById("mpConfig");
     if (!overlay) return;
     if (mode === "hidden") {
@@ -336,6 +371,8 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     overlay.style.display = "flex";
     if (selectBlock)
       selectBlock.style.display = mode === "select" ? "block" : "none";
+    if (roomPrompt)
+      roomPrompt.style.display = mode === "room" ? "flex" : "none";
     if (mpConfig) mpConfig.style.display = mode === "lobby" ? "block" : "none";
   }
 
@@ -345,7 +382,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const hostId = state.lobbyMeta?.hostId || null;
     const localId = firebaseSession.getPlayerId();
     const entries = Object.values(players || {}).sort(
-      (a, b) => (a?.joinedAt || 0) - (b?.joinedAt || 0),
+      (a, b) => (a?.joinedAt || 0) - (b?.joinedAt || 0)
     );
     if (!entries.length) {
       listEl.innerHTML = '<div class="muted-text">No players connected</div>';
@@ -537,7 +574,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       const localEntry =
         state.lobbyPlayers[localId] ||
         Object.values(state.lobbyPlayers || {}).find(
-          (player) => player?.id === localId,
+          (player) => player?.id === localId
         );
       if (localEntry?.color) {
         syncLocalPlayerColor(localEntry.color);
@@ -627,7 +664,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const localId = firebaseSession.getPlayerId();
     if (!localId) return;
     const localPlayer = (gameState.players || []).find(
-      (p) => p && p.clientId === localId,
+      (p) => p && p.clientId === localId
     );
     if (!localPlayer) return;
     localRuntime.attachCustomInputHandlers({
@@ -696,6 +733,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const selectMp = document.getElementById("selectMp");
     const nameInput = document.getElementById("prefName");
     const controlsInput = document.getElementById("prefControls");
+    const roomPromptBack = document.getElementById("mpRoomPromptBack");
 
     const ensureDummyNameSeed = () => {
       if (!nameInput) return nextDummyName();
@@ -761,10 +799,23 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         state.localReady = false;
         setPrefInputsDisabled(false);
         applyLocalPrefsFromInputs();
-        state.showLobbyOnWaiting = true;
-        setModeOverlayState("lobby");
+        state.showLobbyOnWaiting = false;
+        setModeOverlayState("room");
         updateLobbyRoleUi();
-        updateMpStatus("Multiplayer selected - create or join a room");
+        updateMpStatus("Choose create or join to continue");
+        updatePrimaryActionsVisibility();
+      });
+    }
+
+    if (roomPromptBack) {
+      roomPromptBack.addEventListener("click", () => {
+        state.hasSelectedMultiplayer = false;
+        state.localReady = false;
+        state.showLobbyOnWaiting = false;
+        setPrefInputsDisabled(false);
+        setModeOverlayState("select");
+        updateRoomInfo(null);
+        updateMpStatus("Offline");
         updatePrimaryActionsVisibility();
       });
     }
@@ -914,35 +965,38 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const input = document.getElementById("roomIdInput");
     const readyBtn = document.getElementById("mpReadyBtn");
     const startBtn = document.getElementById("mpStartBtn");
-    if (!createBtn || !joinBtn || !input) return;
-    const ensurePrefs = () => {
-      applyLocalPrefsFromInputs();
-    };
+    const copyBtn = document.getElementById("mpRoomCopyBtn");
 
-    createBtn.addEventListener("click", async () => {
-      const generated = firebaseSession.generateRoomId();
-      const newId = normalizeRoomId(generated) || generated;
-      input.value = displayRoomCode(newId);
-      ensurePrefs();
-      await cleanupRoomClient();
-      resetLobbyState();
-      await startHost(newId);
-      updateLobbyRoleUi();
-    });
+    if (createBtn && joinBtn && input) {
+      const ensurePrefs = () => {
+        applyLocalPrefsFromInputs();
+      };
 
-    joinBtn.addEventListener("click", async () => {
-      const roomId = normalizeRoomId(input.value);
-      if (!roomId) {
-        updateMpError("Enter a room code to join");
-        return;
-      }
-      input.value = displayRoomCode(roomId);
-      ensurePrefs();
-      await cleanupRoomClient();
-      resetLobbyState();
-      await startGuest(roomId);
-      updateLobbyRoleUi();
-    });
+      createBtn.addEventListener("click", async () => {
+        const generated = firebaseSession.generateRoomId();
+        const newId = normalizeRoomId(generated) || generated;
+        input.value = displayRoomCode(newId);
+        ensurePrefs();
+        await cleanupRoomClient();
+        resetLobbyState();
+        await startHost(newId);
+        updateLobbyRoleUi();
+      });
+
+      joinBtn.addEventListener("click", async () => {
+        const roomId = normalizeRoomId(input.value);
+        if (!roomId) {
+          updateMpError("Enter a room code to join");
+          return;
+        }
+        input.value = displayRoomCode(roomId);
+        ensurePrefs();
+        await cleanupRoomClient();
+        resetLobbyState();
+        await startGuest(roomId);
+        updateLobbyRoleUi();
+      });
+    }
 
     if (readyBtn) {
       readyBtn.addEventListener("click", async () => {
@@ -979,6 +1033,21 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         beginHostedMatch();
       });
     }
+
+    if (copyBtn) {
+      let resetTimer = null;
+      copyBtn.addEventListener("click", async () => {
+        if (copyBtn.disabled) return;
+        const code = copyBtn.dataset.roomCode;
+        if (!code) return;
+        const ok = await copyTextToClipboard(code);
+        copyBtn.textContent = ok ? "Copied!" : "Copy Failed";
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => {
+          copyBtn.textContent = "Copy Code";
+        }, 1500);
+      });
+    }
   }
 
   function startLocalLoop() {
@@ -1004,7 +1073,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     if (typeof window !== "undefined") {
       window.addEventListener(
         "local-player-config-start",
-        handleLocalConfigStart,
+        handleLocalConfigStart
       );
     }
     document.addEventListener("DOMContentLoaded", () => {

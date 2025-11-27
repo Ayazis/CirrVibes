@@ -65,16 +65,30 @@
             <button id="selectMp">Multiplayer</button>
           </div>
         </div>
-        <div id="mpConfig" style="display: none">
-          <p style="margin: 6px 0">
-            Enter your prefs and create or join a room.
-          </p>
+        <div id="mpRoomPrompt" class="mp-room-prompt" style="display: none">          
+          <div class="room-option-grid">
+            <div class="room-option room-option--host">
+              <h4>Host a Room</h4>
+              <p>Create a lobby and share the code.</p>
+              <button id="createRoomBtn" class="primary">Create Room</button>
+            </div>
+            <div class="room-option room-option--join">
+              <h4>Join a Room</h4>
+              <label>Room Code <input id="roomIdInput" placeholder="room-xxxxxx" /></label>
+              <button id="joinRoomBtn">Join Room</button>
+            </div>
+          </div>
+          <div class="prompt-actions">
+            <button id="mpRoomPromptBack" class="ghost">Back</button>
+          </div>
+        </div>
+        <div id="mpConfig" style="display: none">          
           <div class="prefs-form">
             <div class="name-and-color">
               <label>Name <input id="prefName" placeholder="Player" /></label>
               <span id="prefColorSwatch" class="color-display-swatch"></span>
             </div>
-            <label
+            <label class="pref-controls-field"
               >Controls
               <select id="prefControls">
                 <option value="ArrowLeft / ArrowRight">
@@ -90,28 +104,40 @@
               </select>
             </label>
           </div>
-          <div class="multiplayer-panel" style="margin-top: 10px">
-            <label>Room ID</label>
-            <div class="room-row">
-              <input id="roomIdInput" placeholder="room-xxxxxx" />
-              <button id="createRoomBtn">Create</button>
-              <button id="joinRoomBtn">Join</button>
+          <div class="lobby-layout">
+            <div class="lobby-info">
+              <div class="room-summary">                
+                <div class="room-summary__code-row">
+                  <div id="mpRoomInfo" class="room-summary__code">--</div>
+                  <button
+                    id="mpRoomCopyBtn"
+                    class="room-copy-btn"
+                    type="button"
+                    disabled
+                  >
+                    Copy Code
+                  </button>
+                </div>
+                <div class="room-summary__meta">
+                  <small id="mpStatus">Offline</small>
+                  <small id="mpLatency">Latency: --</small>
+                </div>
+              </div>
+               <div class="actions lobby-actions">
+              <button id="mpReadyBtn" class="primary" disabled>
+                Ready Up
+              </button>
+              <button
+                id="mpStartBtn"
+                class="primary"
+                disabled
+                style="display: none"
+              >
+                Start Game
+              </button>
             </div>
-            <small id="mpStatus">Offline</small>
-            <small id="mpLatency">Latency: --</small>
-            <small id="mpRoomInfo">Room: --</small>
-          </div>
-          <div id="mpPlayerList" class="mp-player-list"></div>
-          <div class="actions lobby-actions">
-            <button id="mpReadyBtn" class="primary" disabled>Ready Up</button>
-            <button
-              id="mpStartBtn"
-              class="primary"
-              disabled
-              style="display: none"
-            >
-              Start Game
-            </button>
+              <div id="mpPlayerList" class="mp-player-list"></div>
+            </div>
           </div>
         </div>
       </div>

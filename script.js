@@ -8,6 +8,11 @@ initGame();
 
 window.gameState = createInitialGameState();
 window.gameCapabilities = isTouchDevice();
+if (window.gameCapabilities?.isTouch) {
+  document.documentElement.classList.add("is-touch-device");
+} else {
+  document.documentElement.classList.remove("is-touch-device");
+}
 const multiplayer = createMultiplayerRuntime({ gameState: window.gameState });
 multiplayer.boot();
 
