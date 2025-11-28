@@ -181,13 +181,13 @@ export function startFixedStepLoop(state, callbacks = {}) {
 
   let callbackBag = callbacks || {};
   let publish = callbackBag.publishState;
-  let publishIntervalMs = 10;
+
   let lastPublish = 0;
 
   function setCallbacks(next) {
     callbackBag = next || {};
     publish = callbackBag.publishState;
-    publishIntervalMs = 1000 / (callbackBag.publishHz || 10);
+    publishIntervalMs = 10;
   }
 
   function frame(now) {
