@@ -65,7 +65,7 @@ function updatePlayer(player, deltaSeconds, state) {
       newY,
       player.id,
       state.frameCounter,
-      TRAIL_WIDTH,
+      TRAIL_WIDTH
     );
   }
 }
@@ -181,7 +181,7 @@ export function startFixedStepLoop(state, callbacks = {}) {
 
   let callbackBag = callbacks || {};
   let publish = callbackBag.publishState;
-  let publishIntervalMs = 1000 / (callbackBag.publishHz || 10);
+  let publishIntervalMs = 10;
   let lastPublish = 0;
 
   function setCallbacks(next) {
