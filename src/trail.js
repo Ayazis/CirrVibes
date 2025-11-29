@@ -36,6 +36,14 @@ export class Trail {
     this._count++;
   }
 
+  set(index, x, y) {
+    if (index < 0 || index >= this._count) return;
+    const idx = (this._start + index) % this._cap;
+    const p = idx * 2;
+    this._data[p] = x;
+    this._data[p + 1] = y;
+  }
+
   forEach(cb) {
     for (let i = 0; i < this._count; i++) {
       const idx = (this._start + i) % this._cap;

@@ -82,6 +82,8 @@ export function createInitialGameState() {
     frameCounter: 0,
     paused: true,
     occupancyGrid,
+    localClientId: null,
+    waitingForSpawnConfirm: false,
   };
 
   state.player1 = state.players[0];

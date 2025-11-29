@@ -76,6 +76,8 @@ export function createLocalRuntime({ gameState }) {
       score: cfg?.score || 0,
       _deathProcessed: false,
       _lastRemoteInputSeq: null,
+      _lastTrailSyncSeq: null,
+      _lastTrailBroadcast: null,
     };
   }
 
@@ -188,7 +190,11 @@ export function createLocalRuntime({ gameState }) {
         clientId: rp.id || rp.playerId,
       };
       const player = ensurePlayerSlot(slot, cfg);
-      if (player) player._lastRemoteInputSeq = null;
+      if (player) {
+        player._lastRemoteInputSeq = null;
+        player._lastTrailSyncSeq = null;
+        player._lastTrailBroadcast = null;
+      }
       slot += 1;
     });
     rebuildOccupancy();
@@ -256,6 +262,8 @@ export function createLocalRuntime({ gameState }) {
       player.isTurningRight = false;
       player._deathProcessed = false;
       player._lastRemoteInputSeq = null;
+      player._lastTrailSyncSeq = null;
+      player._lastTrailBroadcast = null;
     });
     rebuildOccupancy();
     if (gameState) {

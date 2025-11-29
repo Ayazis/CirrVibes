@@ -15,6 +15,7 @@ import {
 } from "./colorUtils.js";
 import { normalizeColorHex } from "./playerColors.js";
 import { createFirebaseSession } from "./firebaseSession.js";
+import { Trail } from "../trail.js";
 
 const MIN_MULTIPLAYER_PLAYERS = 2;
 const DUMMY_NAMES = [
@@ -30,6 +31,8 @@ const DUMMY_NAMES = [
   "StellarSpark",
 ];
 const NAME_SUFFIX_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const TRAIL_SNAPSHOT_POINTS = 12;
+const TRAIL_SNAPSHOT_INTERVAL_MS = 75;
 
 export function createWebMultiplayer({ gameState, localRuntime }) {
   const firebaseSession = createFirebaseSession();
@@ -50,6 +53,9 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     lastResultShownKey: null,
     dummyNameCursor: Math.floor(Math.random() * DUMMY_NAMES.length),
     localColorHex: null,
+    trailSeq: 0,
+    lastMatchStartTs: 0,
+    pendingSpawnClientIds: new Set(),
   };
 
   function stripRoomPrefix(value = "") {
@@ -118,17 +124,29 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   }
 
   function syncContext() {
+    const roomPlayerId = firebaseSession.getPlayerId();
     localRuntime.setContext({
       mpMode: state.mpMode || "local",
       hasRoom: firebaseSession.isConnected(),
-      roomPlayerId: firebaseSession.getPlayerId(),
+      roomPlayerId,
     });
+    if (gameState) {
+      gameState.localClientId = roomPlayerId || null;
+    }
+  }
+
+  function withLoopExtras(callbacks = {}) {
+    return { ...callbacks, afterStep: handleAfterStep };
   }
 
   function startLoopWithCallbacks(callbacks) {
-    if (state.loopStarted) return;
+    const merged = withLoopExtras(callbacks);
+    if (state.loopStarted) {
+      if (state.loopController) state.loopController.setCallbacks(merged);
+      return;
+    }
     state.loopStarted = true;
-    state.loopController = startFixedStepLoop(gameState, callbacks);
+    state.loopController = startFixedStepLoop(gameState, merged);
   }
 
   function updateMpStatus(text) {
@@ -286,6 +304,242 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   function logPlayerPositions(contextLabel = "snapshot") {
     localRuntime.logPlayerPositions(contextLabel);
+  }
+
+  function resetSpawnConfirmations() {
+    state.pendingSpawnClientIds = new Set();
+    if (gameState) gameState.waitingForSpawnConfirm = false;
+  }
+
+  function setupSpawnConfirmations() {
+    if (!gameState) {
+      resetSpawnConfirmations();
+      return;
+    }
+    const pending = new Set();
+    const localId = firebaseSession.getPlayerId();
+    (gameState.players || []).forEach((player) => {
+      if (!player || !player.clientId) return;
+      if (localId && player.clientId === localId) return;
+      if (player.active === false) return;
+      pending.add(player.clientId);
+    });
+    state.pendingSpawnClientIds = pending;
+    if (gameState) gameState.waitingForSpawnConfirm = pending.size > 0;
+  }
+
+  function confirmSpawnForClient(clientId) {
+    if (!clientId || !state.pendingSpawnClientIds) return;
+    if (!state.pendingSpawnClientIds.has(clientId)) return;
+    state.pendingSpawnClientIds.delete(clientId);
+    if (state.pendingSpawnClientIds.size === 0 && gameState) {
+      gameState.waitingForSpawnConfirm = false;
+    }
+  }
+
+  function pruneSpawnConfirmations() {
+    if (!state.pendingSpawnClientIds || state.pendingSpawnClientIds.size === 0)
+      return;
+    const lobbyIds = new Set(Object.keys(state.lobbyPlayers || {}));
+    let changed = false;
+    state.pendingSpawnClientIds.forEach((clientId) => {
+      if (!lobbyIds.has(clientId)) {
+        state.pendingSpawnClientIds.delete(clientId);
+        changed = true;
+      }
+    });
+    if (changed && state.pendingSpawnClientIds.size === 0 && gameState) {
+      gameState.waitingForSpawnConfirm = false;
+    }
+  }
+
+  function applyRemoteDeathScores(deadPlayer) {
+    if (!deadPlayer || !gameState?.players) return;
+    const players = gameState.players;
+    players.forEach((p) => {
+      if (!p || p.id === deadPlayer.id) return;
+      if (p.isAlive) {
+        p.score = (Number(p.score) || 0) + 1;
+      }
+    });
+    try {
+      if (typeof window.updateControlsInfoUI === "function") {
+        window.updateControlsInfoUI(players);
+      }
+    } catch (e) {}
+  }
+
+  function getLocalNetworkPlayer() {
+    if (!gameState?.players) return null;
+    const localId = firebaseSession.getPlayerId();
+    if (!localId) return null;
+    return gameState.players.find((p) => p && p.clientId === localId) || null;
+  }
+
+  function collectRecentTrailPoints(trail, maxPoints) {
+    if (!trail || trail.length === 0) return [];
+    const count = Math.max(1, Math.min(maxPoints, trail.length));
+    const start = trail.length - count;
+    const out = [];
+    const temp = { x: 0, y: 0 };
+    for (let i = start; i < trail.length; i++) {
+      const pt = trail.get(i, temp);
+      if (!pt) continue;
+      out.push([pt.x, pt.y]);
+    }
+    return out;
+  }
+
+  function replaceTrailTailPoints(player, points) {
+    if (!Array.isArray(points) || points.length === 0) return;
+    if (!player.trail) {
+      player.trail = new Trail(1024, points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) {
+        const pair = points[i];
+        if (!Array.isArray(pair)) continue;
+        player.trail.push(pair[0], pair[1]);
+      }
+      return;
+    }
+    if (player.trail.length < points.length) {
+      player.trail.clear();
+      for (let i = 0; i < points.length; i++) {
+        const pair = points[i];
+        if (!Array.isArray(pair)) continue;
+        player.trail.push(pair[0], pair[1]);
+      }
+      return;
+    }
+    const start = player.trail.length - points.length;
+    for (let i = 0; i < points.length; i++) {
+      const pair = points[i];
+      if (!Array.isArray(pair)) continue;
+      const x = Number(pair[0]);
+      const y = Number(pair[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      player.trail.set(start + i, x, y);
+    }
+  }
+
+  function applyTrailSnapshotPayload(clientId, payload) {
+    if (!payload || !gameState) return;
+    const currentSpawnKey = state.lastAppliedSpawnKey || null;
+    const payloadSpawn = payload.spawnKey || null;
+    if (currentSpawnKey && payloadSpawn && payloadSpawn !== currentSpawnKey) {
+      return;
+    }
+    if (currentSpawnKey && !payloadSpawn) {
+      return;
+    }
+    const player = localRuntime.playerByClientId(clientId);
+    if (!player) return;
+    confirmSpawnForClient(clientId);
+    const seq =
+      typeof payload.seq === "number" ? payload.seq : Number(payload.seq);
+    if (Number.isFinite(seq)) {
+      const prev =
+        typeof player._lastTrailSyncSeq === "number"
+          ? player._lastTrailSyncSeq
+          : -Infinity;
+      if (seq <= prev) return;
+      player._lastTrailSyncSeq = seq;
+    }
+    const points = Array.isArray(payload.points) ? payload.points : [];
+    if (points.length > 0) {
+      replaceTrailTailPoints(player, points);
+      const lastPair = points[points.length - 1];
+      if (Array.isArray(lastPair)) {
+        const lx = Number(lastPair[0]);
+        const ly = Number(lastPair[1]);
+        if (Number.isFinite(lx)) player.snakePosition.x = lx;
+        if (Number.isFinite(ly)) player.snakePosition.y = ly;
+      }
+    }
+    if (typeof payload.direction === "number") {
+      player.snakeDirection = payload.direction;
+    }
+    const isAlive = payload.isAlive !== false;
+    if (!isAlive && player.isAlive) {
+      player.isAlive = false;
+      if (!player._deathProcessed) {
+        player._deathProcessed = true;
+        applyRemoteDeathScores(player);
+      }
+    } else if (isAlive && !player.isAlive) {
+      player.isAlive = true;
+      player._deathProcessed = false;
+    }
+  }
+
+  function handleTrailSnapshots(trails = {}) {
+    const entries = Object.entries(trails || {});
+    if (!entries.length) return;
+    const localId = firebaseSession.getPlayerId();
+    const minTs = state.lastMatchStartTs || 0;
+    entries.forEach(([clientId, payload]) => {
+      if (!payload) return;
+      if (localId && clientId === localId) return;
+      const payloadTs =
+        typeof payload.ts === "number" ? payload.ts : Number(payload.ts);
+      if (minTs && Number.isFinite(payloadTs) && payloadTs < minTs) {
+        return;
+      }
+      applyTrailSnapshotPayload(clientId, payload);
+    });
+  }
+
+  function maybeSendLocalTrailSnapshot(options = {}) {
+    const { force = false, resetSeq = false } = options;
+    if (!firebaseSession.isConnected()) return;
+    if (state.mpMode !== "host" && state.mpMode !== "guest") return;
+    if (!gameState) return;
+    const localPlayer = getLocalNetworkPlayer();
+    if (!localPlayer || !localPlayer.trail || localPlayer.trail.length === 0)
+      return;
+    const now = Date.now();
+    const hadBroadcast = !!localPlayer._lastTrailBroadcast;
+    const prevMeta = localPlayer._lastTrailBroadcast || {
+      ts: 0,
+      length: 0,
+      alive: true,
+    };
+    const aliveChanged = prevMeta.alive !== !!localPlayer.isAlive;
+    if (!force) {
+      if (gameState.paused && !aliveChanged && hadBroadcast) {
+        return;
+      }
+      if (!aliveChanged && now - prevMeta.ts < TRAIL_SNAPSHOT_INTERVAL_MS) {
+        return;
+      }
+    }
+    const points = collectRecentTrailPoints(
+      localPlayer.trail,
+      TRAIL_SNAPSHOT_POINTS,
+    );
+    if (!points.length) return;
+    if (resetSeq) state.trailSeq = 0;
+    state.trailSeq += 1;
+    firebaseSession
+      .sendTrailSnapshot({
+        seq: state.trailSeq,
+        ts: now,
+        points,
+        direction: localPlayer.snakeDirection,
+        isAlive: !!localPlayer.isAlive,
+        spawnKey: state.lastAppliedSpawnKey || null,
+      })
+      .catch((err) => {
+        console.warn("sendTrailSnapshot failed", err);
+      });
+    localPlayer._lastTrailBroadcast = {
+      ts: now,
+      length: localPlayer.trail.length,
+      alive: !!localPlayer.isAlive,
+    };
+  }
+
+  function handleAfterStep() {
+    maybeSendLocalTrailSnapshot();
   }
 
   function setPrefInputsDisabled(disabled) {
@@ -539,8 +793,10 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     if (!gameState) return;
     updateMpStatus("Starting match...");
     forceResetState(gameState);
+    setupSpawnConfirmations();
     gameState.paused = false;
     const startTs = Date.now();
+    state.lastMatchStartTs = startTs;
     state.lobbyMeta = {
       ...(state.lobbyMeta || {}),
       status: "running",
@@ -552,6 +808,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     try {
       state.showLobbyOnWaiting = false;
       await broadcastSpawnSnapshot();
+      maybeSendLocalTrailSnapshot({ force: true, resetSeq: true });
     } catch (e) {
       console.warn("Spawn snapshot failed", e);
     }
@@ -568,6 +825,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   function handlePlayersUpdate(players) {
     state.lobbyPlayers = players || {};
+    pruneSpawnConfirmations();
     renderLobbyPlayers(state.lobbyPlayers);
     const localId = firebaseSession.getPlayerId();
     if (localId) {
@@ -591,10 +849,20 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
   function handleMetaChange(meta = {}) {
     state.lobbyMeta = meta || {};
     const status = state.lobbyMeta.status || "waiting";
+    if (typeof state.lobbyMeta.startedAt === "number") {
+      state.lastMatchStartTs = state.lobbyMeta.startedAt;
+    }
+    if (status !== "running") {
+      resetSpawnConfirmations();
+    }
     const snapshot = state.lobbyMeta.spawnSnapshot;
     if (snapshot?.key && snapshot.key !== state.lastAppliedSpawnKey) {
       localRuntime.applySpawnSnapshot(snapshot);
       state.lastAppliedSpawnKey = snapshot.key;
+      if (state.mpMode === "host") {
+        setupSpawnConfirmations();
+      }
+      maybeSendLocalTrailSnapshot({ force: true, resetSeq: true });
     }
     const result = state.lobbyMeta.lastResult;
     if (result?.key && result.key !== state.lastResultShownKey) {
@@ -684,6 +952,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     onPlayersUpdate: (players) => handlePlayersUpdate(players),
     onMetaUpdate: (meta) => handleMetaChange(meta || {}),
     onInputIntent: (inputs) => handleRemoteInputs(inputs),
+    onTrailUpdate: (trails) => handleTrailSnapshots(trails || {}),
   });
 
   async function cleanupRoomClient() {
@@ -697,6 +966,8 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     state.localReady = false;
     state.mpMode = state.mpMode === "local" ? "local" : null;
     state.localColorHex = null;
+    state.trailSeq = 0;
+    resetSpawnConfirmations();
     setPrefInputsDisabled(false);
     state.lastAppliedSpawnKey = null;
     state.showLobbyOnWaiting = false;
@@ -861,6 +1132,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     }
     state.mpMode = "host";
     state.inputSeq = 0;
+    state.trailSeq = 0;
     state.hasSelectedMultiplayer = true;
     localRuntime.pruneToLocalOnly();
     applyLocalPrefsFromInputs();
@@ -886,6 +1158,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     } catch (e) {}
     localRuntime.refreshPlayerUi();
     attachNetworkInputHandlers();
+    maybeSendLocalTrailSnapshot();
     updateLobbyRoleUi();
     updateLobbyUi();
     state.showLobbyOnWaiting = true;
@@ -916,7 +1189,6 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     };
 
     startLoopWithCallbacks(callbacks);
-    if (state.loopController) state.loopController.setCallbacks(callbacks);
   }
 
   async function startGuest(roomIdInput) {
@@ -927,6 +1199,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     }
     state.mpMode = "guest";
     state.inputSeq = 0;
+    state.trailSeq = 0;
     state.hasSelectedMultiplayer = true;
     localRuntime.pruneToLocalOnly();
     applyLocalPrefsFromInputs();
@@ -952,6 +1225,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     } catch (e) {}
     localRuntime.refreshPlayerUi();
     attachNetworkInputHandlers();
+    maybeSendLocalTrailSnapshot();
     updateLobbyRoleUi();
     updateLobbyUi();
     state.showLobbyOnWaiting = true;

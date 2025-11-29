@@ -5,18 +5,20 @@ import {
 } from "./constants.js";
 import { distanceToLineSegmentSq } from "./math.js";
 
-// Check if a position collides with any trail in state; prefers occupancy grid if present.
+// Check if a position collides with any trail in state;
+// prefers occupancy grid if present.
 export function checkTrailCollision(x, y, currentPlayer, state) {
   if (!state) return false;
   const grid = state.occupancyGrid;
   if (grid) {
-    return grid.checkCollision(
+    const hit = grid.checkCollision(
       x,
       y,
       TRAIL_COLLISION_RADIUS,
       currentPlayer.id,
-      state.frameCounter,
+      state.frameCounter
     );
+    if (hit) return true;
   }
 
   const playersArr = state.players || [];
@@ -30,7 +32,7 @@ export function checkTrailCollision(x, y, currentPlayer, state) {
         player.trail,
         TRAIL_COLLISION_RADIUS,
         player === currentPlayer,
-        TRAIL_SAFE_FRAMES,
+        TRAIL_SAFE_FRAMES
       )
     ) {
       return true;
@@ -46,7 +48,7 @@ export function checkTrailSegmentCollision(
   trail,
   radius,
   isOwnTrail,
-  skipPoints,
+  skipPoints
 ) {
   if (!trail || trail.length < 2) return false;
   const skip = isOwnTrail ? Math.max(0, skipPoints) : 0;

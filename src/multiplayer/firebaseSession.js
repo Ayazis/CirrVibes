@@ -22,6 +22,7 @@ export function createFirebaseSession(initialCallbacks = {}) {
     client.listenPlayers((players) => invoke("onPlayersUpdate", players));
     client.listenMeta((meta) => invoke("onMetaUpdate", meta));
     client.listenInputs((inputs) => invoke("onInputIntent", inputs));
+    client.listenTrails((trails) => invoke("onTrailUpdate", trails));
   }
 
   async function connect(roomId, playerInfo, isHost) {
@@ -57,6 +58,7 @@ export function createFirebaseSession(initialCallbacks = {}) {
     updateMeta: (meta) => client?.updateMeta(meta),
     publishState: (payload) => client?.publishState(payload),
     sendInput: (payload) => client?.sendInput(payload),
+    sendTrailSnapshot: (payload) => client?.sendTrailSnapshot(payload),
     isConnected: () => !!client,
     getPlayerId: () => client?.playerId || null,
     getRole: () => role,

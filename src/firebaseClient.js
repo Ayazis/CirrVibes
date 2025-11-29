@@ -53,8 +53,10 @@ export function writePresenceCleanup(roomId, playerId) {
   try {
     const playerRef = roomRef(roomId, `players/${playerId}`);
     const inputRef = roomRef(roomId, `inputs/${playerId}`);
+    const trailRef = roomRef(roomId, `trails/${playerId}`);
     onDisconnect(playerRef).remove();
     onDisconnect(inputRef).remove();
+    onDisconnect(trailRef).remove();
   } catch (e) {
     // ignore presence cleanup errors for now
   }

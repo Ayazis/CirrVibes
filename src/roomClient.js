@@ -87,6 +87,14 @@ export class RoomClient {
     return unsub;
   }
 
+  listenTrails(cb) {
+    const unsub = listen(roomRef(this.roomId, "trails"), (val) =>
+      cb(val || {}),
+    );
+    this._listeners.push(unsub);
+    return unsub;
+  }
+
   listenState(cb) {
     const unsub = listen(roomRef(this.roomId, "state"), (val) => cb(val || {}));
     this._listeners.push(unsub);
@@ -126,6 +134,17 @@ export class RoomClient {
     return setValue(ref, payload);
   }
 
+  async sendTrailSnapshot(payload) {
+    if (!payload) return;
+    if (!this._synced) await this.joinRoom();
+    const ref = roomRef(this.roomId, `trails/${this.playerId}`);
+    return setValue(ref, {
+      ...payload,
+      ts: payload.ts || Date.now(),
+      seq: payload.seq || 0,
+    });
+  }
+
   async updateMeta(patch) {
     const ref = roomRef(this.roomId, "meta");
     return updateValue(ref, patch);
@@ -146,6 +165,7 @@ export class RoomClient {
     try {
       await removeValue(roomRef(this.roomId, `players/${this.playerId}`));
       await removeValue(roomRef(this.roomId, `inputs/${this.playerId}`));
+      await removeValue(roomRef(this.roomId, `trails/${this.playerId}`));
     } catch (e) {
       // best effort
     }
