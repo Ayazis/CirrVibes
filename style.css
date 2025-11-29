@@ -1,3 +1,13 @@
+:root {
+  --game-stage-max-width: 960px;
+  --game-stage-horizontal-gap: 40px;
+  --game-stage-width: min(
+    var(--game-stage-max-width),
+    max(0px, calc(100vw - var(--game-stage-horizontal-gap)))
+  );
+  --game-canvas-aspect: 16 / 9;
+}
+
 /* Basic styling for the game canvas */
 body {
   margin: 0;
@@ -16,6 +26,9 @@ body {
   text-align: center;
   margin-bottom: 20px;
   transform-origin: top center;
+  width: var(--game-stage-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .controls-info h2 {
@@ -61,6 +74,11 @@ body {
 canvas {
   border: 2px solid #fff;
   background-color: #111;
+  display: block;
+  width: var(--game-stage-width);
+  max-width: var(--game-stage-max-width);
+  aspect-ratio: var(--game-canvas-aspect);
+  height: auto;
 }
 
 .interface-actions {
@@ -387,7 +405,9 @@ canvas {
 
 .is-touch-device .controls-info {
   max-width: 520px;
-  width: 100%;
+  width: min(520px, var(--game-stage-width));
+  margin-left: auto;
+  margin-right: auto;
   margin-bottom: 12px;
   transform: none;
   font-size: 0.95rem;
