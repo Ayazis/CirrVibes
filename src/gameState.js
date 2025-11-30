@@ -60,6 +60,9 @@ export function createInitialGameState() {
       controls: cfg.controls || defaultConfig[idx].controls,
       score: 0,
       _deathProcessed: false,
+      gapTimer: 0,
+      isGap: false,
+      nextGapTime: 4 + Math.random() * 8,
     };
   });
 

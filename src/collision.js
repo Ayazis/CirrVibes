@@ -60,6 +60,7 @@ export function checkTrailSegmentCollision(
   for (let i = 0; i < maxIndex; i++) {
     const p1 = trail.get(i, temp1);
     const p2 = trail.get(i + 1, temp2);
+    if (isNaN(p1.x) || isNaN(p2.x)) continue;
     const distSq = distanceToLineSegmentSq(x, y, p1.x, p1.y, p2.x, p2.y);
     if (distSq < radiusSq) return true;
   }

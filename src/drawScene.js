@@ -198,6 +198,7 @@ export const drawScene = (gl, canvas) => {
         const prev = trail.get(i - 1, prevPoint);
         const curr = trail.get(i, currPoint);
         if (!prev || !curr) continue;
+        if (isNaN(prev.x) || isNaN(curr.x)) continue;
         offset = writeSegment(offset, prev.x, prev.y, curr.x, curr.y);
       }
     } else if (Array.isArray(trail)) {
@@ -208,7 +209,9 @@ export const drawScene = (gl, canvas) => {
           !prev ||
           !curr ||
           typeof prev.x !== "number" ||
-          typeof curr.x !== "number"
+          typeof curr.x !== "number" ||
+          isNaN(prev.x) ||
+          isNaN(curr.x)
         )
           continue;
         offset = writeSegment(offset, prev.x, prev.y, curr.x, curr.y);
@@ -361,6 +364,21 @@ export const drawScene = (gl, canvas) => {
 
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([startX, startY]), gl.DYNAMIC_DRAW);
       gl.uniform4fv(headColorLoc, colorWithAlpha);
+      gl.drawArrays(gl.POINTS, 0, 1);
+    }
+
+    // 3. Draw Player Heads (Current Position)
+    const viewSize = state?.viewSize ?? 10;
+    const pixelsPerUnit = canvas.height / (2 * viewSize);
+    const headDiameterPixels = TRAIL_WIDTH * 2 * pixelsPerUnit;
+    gl.uniform1f(headSizeLoc, headDiameterPixels);
+
+    for (let i = 0; i < players.length; i++) {
+      const player = players[i];
+      if (!player || !player.isAlive) continue;
+      
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([player.snakePosition.x, player.snakePosition.y]), gl.DYNAMIC_DRAW);
+      gl.uniform4fv(headColorLoc, player.color);
       gl.drawArrays(gl.POINTS, 0, 1);
     }
 

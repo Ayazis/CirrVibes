@@ -78,6 +78,7 @@ export class OccupancyGrid {
         const prev = trail.get(t - 1, tempPrev);
         const curr = trail.get(t, tempCurr);
         if (!prev || !curr) continue;
+        if (isNaN(prev.x) || isNaN(curr.x)) continue;
         this.occupySegment(prev.x, prev.y, curr.x, curr.y, id, frame);
       }
     }

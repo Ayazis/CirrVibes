@@ -99,6 +99,10 @@ export function drawScene2d(ctx, canvas) {
         ctx.beginPath();
         let firstPoint = true;
         trail.forEach((x, y) => {
+          if (isNaN(x)) {
+            firstPoint = true;
+            return;
+          }
           const sx = ((x - bounds.minX) / worldWidth) * canvas.width;
           const sy = ((bounds.maxY - y) / worldHeight) * canvas.height;
           if (firstPoint) {
@@ -144,6 +148,16 @@ export function drawScene2d(ctx, canvas) {
 
           ctx.restore();
         }
+      }
+
+      // Draw head (current position)
+      if (player.isAlive) {
+        const hx = ((player.snakePosition.x - bounds.minX) / worldWidth) * canvas.width;
+        const hy = ((bounds.maxY - player.snakePosition.y) / worldHeight) * canvas.height;
+        ctx.fillStyle = colorToCss(player.color);
+        ctx.beginPath();
+        ctx.arc(hx, hy, strokeWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
       }
     });
 

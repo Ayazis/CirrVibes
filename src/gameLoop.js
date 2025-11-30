@@ -49,6 +49,23 @@ function updatePlayer(player, deltaSeconds, state) {
     awardPointsForDeath(player, state);
   }
 
+  // Gap logic
+  player.gapTimer = (player.gapTimer || 0) + deltaSeconds;
+  if (!player.isGap) {
+    if (player.gapTimer >= (player.nextGapTime || 3)) {
+      player.isGap = true;
+      player.gapTimer = 0;
+      player.gapDuration = 0.2 + Math.random() * 0.3;
+      player.trail.push(NaN, NaN);
+    }
+  } else {
+    if (player.gapTimer >= (player.gapDuration || 0.3)) {
+      player.isGap = false;
+      player.gapTimer = 0;
+      player.nextGapTime = 4 + Math.random() * 8;
+    }
+  }
+
   const grid = state?.occupancyGrid;
   const tailScratch =
     player._trailScratch ||
@@ -60,18 +77,21 @@ function updatePlayer(player, deltaSeconds, state) {
 
   player.snakePosition.x = newX;
   player.snakePosition.y = newY;
-  player.trail.push(newX, newY);
 
-  if (grid) {
-    grid.occupySegment(
-      lastPoint.x,
-      lastPoint.y,
-      newX,
-      newY,
-      player.id,
-      state.frameCounter,
-      TRAIL_WIDTH
-    );
+  if (!player.isGap) {
+    player.trail.push(newX, newY);
+
+    if (grid) {
+      grid.occupySegment(
+        lastPoint.x,
+        lastPoint.y,
+        newX,
+        newY,
+        player.id,
+        state.frameCounter,
+        TRAIL_WIDTH
+      );
+    }
   }
 }
 
@@ -90,7 +110,7 @@ function awardPointsForDeath(deadPlayer, state) {
     try {
       if (typeof window.updateControlsInfoUI === "function")
         window.updateControlsInfoUI(state.players);
-    } catch (e) {}
+    } catch (e) { }
   } catch (e) {
     // silent
   }
