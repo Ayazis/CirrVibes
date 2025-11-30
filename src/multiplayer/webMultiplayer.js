@@ -366,7 +366,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       if (typeof window.updateControlsInfoUI === "function") {
         window.updateControlsInfoUI(players);
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function getLocalNetworkPlayer() {
@@ -655,8 +655,14 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         );
         const ready = !!p?.ready;
         const badgeClass = isHost ? "host" : ready ? "yes" : "no";
-        const label = isHost ? "Host" : ready ? "Ready" : "Not ready";
-        return `<div class="mp-player"><div class="player-info"><span class="swatch" style="background:${color};"></span><span>${name}</span></div><span class="ready badge ${badgeClass}">${label}</span></div>`;
+        // Compact labels/icons
+        const label = isHost ? "HOST" : ready ? "RDY" : "";
+
+        return `<div class="mp-player ${badgeClass}" title="${name}">
+          <span class="swatch" style="background:${color};"></span>
+          <span class="name">${name}</span>
+          ${label ? `<span class="status-badge">${label}</span>` : ""}
+        </div>`;
       })
       .join("");
     listEl.innerHTML = rows;
@@ -1155,7 +1161,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     setPrefInputsDisabled(false);
     try {
       await firebaseSession.setReady(false);
-    } catch (e) {}
+    } catch (e) { }
     localRuntime.refreshPlayerUi();
     attachNetworkInputHandlers();
     maybeSendLocalTrailSnapshot();
@@ -1222,7 +1228,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     setPrefInputsDisabled(false);
     try {
       await firebaseSession.setReady(false);
-    } catch (e) {}
+    } catch (e) { }
     localRuntime.refreshPlayerUi();
     attachNetworkInputHandlers();
     maybeSendLocalTrailSnapshot();

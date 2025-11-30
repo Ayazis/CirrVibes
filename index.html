@@ -8,7 +8,7 @@
   </head>
   <body>
     <div class="controls-info">
-      <h2>Line-Evader</h2>
+      <canvas id="gameCanvas"></canvas>
       <div class="player-controls">
         <div id="roster" class="roster"></div>
       </div>
@@ -26,7 +26,6 @@
         <button id="startGameBtn">Start</button>
       </div>
     </div>
-    <canvas id="gameCanvas"></canvas>
 
     <div class="touch-controls" id="touchControls" aria-hidden="true">
       <button
@@ -58,8 +57,9 @@
     <div class="mode-overlay" id="modeOverlay">
       <div class="mode-card">
         <div id="modeSelectBlock">
+          <h1>Line-Evader</h1>
+          <p class="tagline">-- avoid lines and stay alive.</p>
           <h3>Select mode</h3>
-          <p>Play locally or online via Firebase.</p>
           <div class="actions">
             <button id="selectLocal" class="primary">Local</button>
             <button id="selectMp">Multiplayer</button>

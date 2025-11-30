@@ -39,10 +39,48 @@ body {
 
 .player-controls {
   display: flex;
-  gap: 40px;
+  gap: 10px;
   justify-content: center;
   flex-wrap: wrap;
-  align-items: flex-start; /* ensure player cards align at the top */
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.compact-roster {
+  gap: 8px;
+}
+
+.player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.player-chip .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.player-chip .name {
+  font-weight: 500;
+}
+
+.player-chip .score {
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 6px;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
 }
 
 .name-and-color {
@@ -75,10 +113,11 @@ canvas {
   border: 2px solid #fff;
   background-color: #111;
   display: block;
-  width: var(--game-stage-width);
+  width: 100%;
   max-width: var(--game-stage-max-width);
   aspect-ratio: var(--game-canvas-aspect);
   height: auto;
+  margin: 0 auto 12px auto;
 }
 
 .interface-actions {
@@ -210,62 +249,64 @@ canvas {
   padding: 8px;
   background: rgba(0, 0, 0, 0.35);
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
-  min-height: 60px;
+  min-height: 40px;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .muted-text {
   color: #888;
   font-size: 12px;
+  width: 100%;
+  text-align: center;
 }
 
 .mp-player-list .mp-player {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.mp-player-list .mp-player .player-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mp-player-list .mp-player .ready.badge {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.mp-player-list .mp-player .ready.yes {
-  background: rgba(0, 187, 119, 0.2);
-  border: 1px solid rgba(0, 187, 119, 0.7);
-  color: #0b7;
-}
-
-.mp-player-list .mp-player .ready.no {
-  background: rgba(255, 102, 102, 0.2);
-  border: 1px solid rgba(255, 102, 102, 0.6);
-  color: #f77;
-}
-
-.mp-player-list .mp-player .ready.host {
+.mp-player-list .mp-player.host {
+  border-color: rgba(255, 255, 255, 0.4);
   background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #f0f0f0;
+}
+
+.mp-player-list .mp-player.yes {
+  border-color: rgba(0, 187, 119, 0.5);
+  background: rgba(0, 187, 119, 0.1);
+}
+
+.mp-player-list .mp-player .name {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-player-list .status-badge {
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
 }
 
 .mp-player-list .swatch {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   display: inline-block;
   border: 1px solid rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
 }
 
 .lobby-actions {
@@ -542,6 +583,21 @@ canvas {
   transform-origin: center;
 }
 
+.mode-card h1 {
+  margin: 0 0 4px 0;
+  font-size: 28px;
+  color: #fff;
+  text-align: center;
+}
+
+.mode-card .tagline {
+  margin: 0 0 20px 0;
+  color: #aaa;
+  font-size: 14px;
+  font-style: italic;
+  text-align: center;
+}
+
 .mode-card h3 {
   margin: 0;
 }
@@ -731,6 +787,9 @@ canvas {
     width: 60px;
     height: 60px;
     font-size: 26px;
+  }
+  .controls-info {
+    margin-bottom: 10px;
   }
 }
 
