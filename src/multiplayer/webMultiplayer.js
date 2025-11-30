@@ -18,7 +18,7 @@ import { normalizeColorHex } from "./playerColors.js";
 import { createFirebaseSession } from "./firebaseSession.js";
 import { Trail } from "../trail.js";
 
-const MIN_MULTIPLAYER_PLAYERS = 2;
+const MIN_MULTIPLAYER_PLAYERS = 1;
 const DUMMY_NAMES = [
   "NeonNova",
   "TurboTrail",
@@ -722,7 +722,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     const startBtn = document.getElementById("mpStartBtn");
     const status = state.lobbyMeta?.status || "waiting";
     const { total, ready, guestTotal, guestReady, hostPresent } = lobbyCounts();
-    const guestsReady = guestTotal > 0 && guestReady === guestTotal;
+    const guestsReady = guestTotal === 0 || (guestReady === guestTotal);
     const enoughPlayers = total >= MIN_MULTIPLAYER_PLAYERS;
     let statusText = "Waiting for players...";
     if (total) {
@@ -766,7 +766,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   function areGuestsReady() {
     const { guestTotal, guestReady } = lobbyCounts();
-    return guestTotal > 0 && guestReady === guestTotal;
+    return guestTotal === 0 || (guestReady === guestTotal);
   }
 
   function hasEnoughPlayers() {
@@ -807,7 +807,9 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       return;
     }
     try {
-      await firebaseSession.updateMeta({ status: "playing", startedAt: Date.now() });
+      forceResetState(gameState);
+      if (gameState) gameState.paused = true;
+      await firebaseSession.updateMeta({ status: "running", startedAt: Date.now() });
       const spawnKey = await broadcastSpawnSnapshot();
       state.pendingSpawnClientIds = new Set(
         Object.values(state.lobbyPlayers || {})
@@ -1132,7 +1134,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       .filter(Boolean);
     try {
       await firebaseSession.updateMeta({ spawnSnapshot: { key, players } });
-      state.lastAppliedSpawnKey = key;
+      // state.lastAppliedSpawnKey = key;
       logPlayerPositions("host-broadcast");
     } catch (e) {
       console.warn("broadcastSpawnSnapshot failed", e);

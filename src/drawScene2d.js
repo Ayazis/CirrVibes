@@ -92,23 +92,26 @@ export function drawScene2d(ctx, canvas) {
 
     players.forEach((player) => {
       const trail = player?.trail;
-      if (!trail || typeof trail.length !== "number" || trail.length < 2)
+      if (!trail || typeof trail.length !== "number" || trail.length === 0)
         return;
-      ctx.beginPath();
-      let firstPoint = true;
-      trail.forEach((x, y) => {
-        const sx = ((x - bounds.minX) / worldWidth) * canvas.width;
-        const sy = ((bounds.maxY - y) / worldHeight) * canvas.height;
-        if (firstPoint) {
-          ctx.moveTo(sx, sy);
-          firstPoint = false;
-        } else {
-          ctx.lineTo(sx, sy);
-        }
-      });
-      ctx.strokeStyle = colorToCss(player.color);
-      ctx.lineWidth = strokeWidth;
-      ctx.stroke();
+
+      if (trail.length >= 2) {
+        ctx.beginPath();
+        let firstPoint = true;
+        trail.forEach((x, y) => {
+          const sx = ((x - bounds.minX) / worldWidth) * canvas.width;
+          const sy = ((bounds.maxY - y) / worldHeight) * canvas.height;
+          if (firstPoint) {
+            ctx.moveTo(sx, sy);
+            firstPoint = false;
+          } else {
+            ctx.lineTo(sx, sy);
+          }
+        });
+        ctx.strokeStyle = colorToCss(player.color);
+        ctx.lineWidth = strokeWidth;
+        ctx.stroke();
+      }
 
       // Draw start marker (temporary)
       if (trail.length > 0 && trail.length < 30) {

@@ -106,11 +106,12 @@ export function updateSnake(deltaSeconds, state, { onWinner, onDraw } = {}) {
     updatePlayer(playersArr[i], deltaSeconds, state);
   }
 
-  const alive = playersArr.filter((p) => p && p.isAlive);
+  const activePlayers = playersArr.filter((p) => p && p.active !== false);
+  const alive = activePlayers.filter((p) => p.isAlive);
   if (state.waitingForSpawnConfirm) {
     return;
   }
-  if (alive.length === 1 && !state.winnerShown) {
+  if (activePlayers.length > 1 && alive.length === 1 && !state.winnerShown) {
     state.winnerShown = true;
     state.paused = true;
     if (onWinner) onWinner(alive[0]);

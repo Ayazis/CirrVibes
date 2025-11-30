@@ -270,7 +270,7 @@ export function createLocalRuntime({ gameState }) {
       gameState.frameCounter = 0;
       gameState.gameOverLogged = false;
       gameState.winnerShown = false;
-      gameState.paused = false;
+      // gameState.paused = false; // Do not unpause here, let the countdown handle it
     }
     refreshPlayerUi();
     logPlayerPositions(snapshot.key || "applied");

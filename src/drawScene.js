@@ -312,6 +312,7 @@ export const drawScene = (gl, canvas) => {
 
     for (let i = 0; i < players.length; i++) {
       const player = players[i];
+      if (!player) continue;
       const usedFloats = buildTrailVertices(player.trail);
       if (usedFloats === 0) continue;
 
@@ -339,6 +340,7 @@ export const drawScene = (gl, canvas) => {
 
     for (let i = 0; i < players.length; i++) {
       const player = players[i];
+      if (!player) continue;
       const trail = player.trail;
       // Fade out over 30 frames (approx 0.5s)
       if (!trail || trail.length === 0 || trail.length > 30) continue;
