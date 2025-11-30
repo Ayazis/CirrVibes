@@ -102,13 +102,13 @@ export const drawScene = (gl, canvas) => {
   gl.attachShader(headProgram, headVertexShader);
   gl.attachShader(headProgram, headFragmentShader);
   gl.linkProgram(headProgram);
-  
+
   const headPosLoc = gl.getAttribLocation(headProgram, "position");
   const headMvLoc = gl.getUniformLocation(headProgram, "modelViewMatrix");
   const headProjLoc = gl.getUniformLocation(headProgram, "projectionMatrix");
   const headSizeLoc = gl.getUniformLocation(headProgram, "pointSize");
   const headColorLoc = gl.getUniformLocation(headProgram, "color");
-  
+
   const headBuffer = gl.createBuffer();
 
   gl.useProgram(program);
@@ -299,7 +299,7 @@ export const drawScene = (gl, canvas) => {
     gl.enableVertexAttribArray(startLocation);
     gl.enableVertexAttribArray(endLocation);
     gl.enableVertexAttribArray(cornerLocation);
-    
+
     // Re-bind pointers because switching programs might mess them up if we were strict, 
     // but here we just ensure they are set for the trail program
     gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 0);
@@ -330,30 +330,30 @@ export const drawScene = (gl, canvas) => {
     gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer);
     gl.enableVertexAttribArray(headPosLoc);
     gl.vertexAttribPointer(headPosLoc, 2, gl.FLOAT, false, 0, 0);
-    
+
     gl.uniformMatrix4fv(headMvLoc, false, modelViewMatrix);
     gl.uniformMatrix4fv(headProjLoc, false, projectionMatrix);
     // Calculate point size based on canvas height to keep it somewhat proportional or just fixed large
     // Fixed large pixel block as requested
-    gl.uniform1f(headSizeLoc, 8.0); 
+    gl.uniform1f(headSizeLoc, 8.0);
 
     for (let i = 0; i < players.length; i++) {
       const player = players[i];
       const trail = player.trail;
       // Fade out over 30 frames (approx 0.5s)
       if (!trail || trail.length === 0 || trail.length > 30) continue;
-      
+
       let startX, startY;
       if (typeof trail.get === "function") {
-         const p = trail.get(0, currPoint); // reuse currPoint scratch
-         startX = p.x;
-         startY = p.y;
+        const p = trail.get(0, currPoint); // reuse currPoint scratch
+        startX = p.x;
+        startY = p.y;
       } else {
-         const p = trail[0];
-         startX = p.x;
-         startY = p.y;
+        const p = trail[0];
+        startX = p.x;
+        startY = p.y;
       }
-      
+
       const alpha = 1.0 - (trail.length / 30.0);
       const colorWithAlpha = [player.color[0], player.color[1], player.color[2], (player.color[3] !== undefined ? player.color[3] : 1.0) * alpha];
 

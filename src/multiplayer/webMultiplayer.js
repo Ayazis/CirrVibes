@@ -566,7 +566,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       state.mpMode === "host" || state.mpMode === "guest";
     if (isMultiplayerMode || state.hasSelectedMultiplayer) return;
     localRuntime.applyLocalRoster(roster);
-    
+
     // Start countdown for local game
     if (gameState) gameState.paused = true;
     showCountdownOverlay(3, () => {
@@ -814,7 +814,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
           .map((p) => p.id)
           .filter((id) => id !== firebaseSession.getPlayerId())
       );
-      
+
       // Start countdown for host
       setModeOverlayState("hidden");
       // Host sets status to running immediately so guests see it, 
@@ -824,7 +824,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       // Let's rely on handleMetaChange for consistency or just set it here.
       // If we set it here, handleMetaChange might re-trigger.
       // Let's just update meta and let handleMetaChange do the work for everyone including host.
-      
+
     } catch (e) {
       console.warn("beginHostedMatch failed", e);
     }
@@ -878,13 +878,13 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     if ((state.mpMode === "host" || state.mpMode === "guest") && gameState) {
       // If status is running, we might need to start countdown if we just transitioned
       if (status === "running" && gameState.paused) {
-         // We are transitioning to running state
-         setModeOverlayState("hidden");
-         showCountdownOverlay(3, () => {
-            if (gameState) gameState.paused = false;
-         });
+        // We are transitioning to running state
+        setModeOverlayState("hidden");
+        showCountdownOverlay(3, () => {
+          if (gameState) gameState.paused = false;
+        });
       } else if (status !== "running") {
-         gameState.paused = true;
+        gameState.paused = true;
       }
     }
     if (!state.hasSelectedMultiplayer) return;
