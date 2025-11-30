@@ -109,6 +109,39 @@ export function drawScene2d(ctx, canvas) {
       ctx.strokeStyle = colorToCss(player.color);
       ctx.lineWidth = strokeWidth;
       ctx.stroke();
+
+      // Draw start marker (temporary)
+      if (trail.length > 0 && trail.length < 30) {
+        const startX = trail.get ? trail.get(0).x : trail[0].x;
+        const startY = trail.get ? trail.get(0).y : trail[0].y;
+        
+        if (typeof startX === 'number' && typeof startY === 'number') {
+          const sx = ((startX - bounds.minX) / worldWidth) * canvas.width;
+          const sy = ((bounds.maxY - startY) / worldHeight) * canvas.height;
+          const markerSize = strokeWidth * 4; 
+          const alpha = 1 - (trail.length / 30);
+          
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = colorToCss(player.color);
+          ctx.beginPath();
+          ctx.arc(sx, sy, markerSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Draw player name
+          if (player.name) {
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 12px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.shadowColor = "rgba(0,0,0,0.8)";
+            ctx.shadowBlur = 4;
+            ctx.fillText(player.name, sx, sy - markerSize / 2 - 4);
+          }
+          
+          ctx.restore();
+        }
+      }
     });
 
     ctx.restore();

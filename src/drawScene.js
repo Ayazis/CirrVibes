@@ -75,6 +75,42 @@ export const drawScene = (gl, canvas) => {
     gl.deleteProgram(program);
     return;
   }
+
+  // Head shader (simple point)
+  const headVertexSource = `
+    attribute vec2 position;
+    uniform mat4 modelViewMatrix;
+    uniform mat4 projectionMatrix;
+    uniform float pointSize;
+    void main() {
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 0.0, 1.0);
+      gl_PointSize = pointSize;
+    }
+  `;
+  const headFragmentSource = `
+    precision mediump float;
+    uniform vec4 color;
+    void main() {
+      vec2 coord = gl_PointCoord - vec2(0.5);
+      if(length(coord) > 0.5) discard;
+      gl_FragColor = color;
+    }
+  `;
+  const headVertexShader = compileShader(gl.VERTEX_SHADER, headVertexSource);
+  const headFragmentShader = compileShader(gl.FRAGMENT_SHADER, headFragmentSource);
+  const headProgram = gl.createProgram();
+  gl.attachShader(headProgram, headVertexShader);
+  gl.attachShader(headProgram, headFragmentShader);
+  gl.linkProgram(headProgram);
+  
+  const headPosLoc = gl.getAttribLocation(headProgram, "position");
+  const headMvLoc = gl.getUniformLocation(headProgram, "modelViewMatrix");
+  const headProjLoc = gl.getUniformLocation(headProgram, "projectionMatrix");
+  const headSizeLoc = gl.getUniformLocation(headProgram, "pointSize");
+  const headColorLoc = gl.getUniformLocation(headProgram, "color");
+  
+  const headBuffer = gl.createBuffer();
+
   gl.useProgram(program);
 
   const startLocation = gl.getAttribLocation(program, "start");
@@ -257,6 +293,21 @@ export const drawScene = (gl, canvas) => {
       return;
     }
 
+    // 1. Draw Trails
+    gl.useProgram(program);
+    gl.bindBuffer(gl.ARRAY_BUFFER, segmentBuffer);
+    gl.enableVertexAttribArray(startLocation);
+    gl.enableVertexAttribArray(endLocation);
+    gl.enableVertexAttribArray(cornerLocation);
+    
+    // Re-bind pointers because switching programs might mess them up if we were strict, 
+    // but here we just ensure they are set for the trail program
+    gl.vertexAttribPointer(startLocation, 2, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 0);
+    gl.vertexAttribPointer(endLocation, 2, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 8);
+    gl.vertexAttribPointer(cornerLocation, 1, gl.FLOAT, false, FLOATS_PER_VERTEX * 4, 16);
+
+    gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix);
+    gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix);
     gl.uniform1f(trailWidthLocation, TRAIL_WIDTH);
 
     for (let i = 0; i < players.length; i++) {
@@ -272,6 +323,43 @@ export const drawScene = (gl, canvas) => {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, quadScratch.subarray(0, usedFloats));
       gl.uniform4fv(baseColorLocation, player.color);
       gl.drawArrays(gl.TRIANGLES, 0, usedFloats / FLOATS_PER_VERTEX);
+    }
+
+    // 2. Draw Start Markers
+    gl.useProgram(headProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer);
+    gl.enableVertexAttribArray(headPosLoc);
+    gl.vertexAttribPointer(headPosLoc, 2, gl.FLOAT, false, 0, 0);
+    
+    gl.uniformMatrix4fv(headMvLoc, false, modelViewMatrix);
+    gl.uniformMatrix4fv(headProjLoc, false, projectionMatrix);
+    // Calculate point size based on canvas height to keep it somewhat proportional or just fixed large
+    // Fixed large pixel block as requested
+    gl.uniform1f(headSizeLoc, 8.0); 
+
+    for (let i = 0; i < players.length; i++) {
+      const player = players[i];
+      const trail = player.trail;
+      // Fade out over 30 frames (approx 0.5s)
+      if (!trail || trail.length === 0 || trail.length > 30) continue;
+      
+      let startX, startY;
+      if (typeof trail.get === "function") {
+         const p = trail.get(0, currPoint); // reuse currPoint scratch
+         startX = p.x;
+         startY = p.y;
+      } else {
+         const p = trail[0];
+         startX = p.x;
+         startY = p.y;
+      }
+      
+      const alpha = 1.0 - (trail.length / 30.0);
+      const colorWithAlpha = [player.color[0], player.color[1], player.color[2], (player.color[3] !== undefined ? player.color[3] : 1.0) * alpha];
+
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([startX, startY]), gl.DYNAMIC_DRAW);
+      gl.uniform4fv(headColorLoc, colorWithAlpha);
+      gl.drawArrays(gl.POINTS, 0, 1);
     }
 
     requestAnimationFrame(renderFrame);

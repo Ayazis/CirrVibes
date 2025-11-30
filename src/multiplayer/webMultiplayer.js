@@ -3,6 +3,7 @@ import {
   showDrawOverlay,
   showWinnerOverlay,
 } from "../ui/overlays.js";
+import { showCountdownOverlay } from "../ui/inGameOverlay.js";
 import {
   startFixedStepLoop,
   resetGame as resetGameState,
@@ -565,6 +566,12 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       state.mpMode === "host" || state.mpMode === "guest";
     if (isMultiplayerMode || state.hasSelectedMultiplayer) return;
     localRuntime.applyLocalRoster(roster);
+    
+    // Start countdown for local game
+    if (gameState) gameState.paused = true;
+    showCountdownOverlay(3, () => {
+      if (gameState) gameState.paused = false;
+    });
   }
 
   function applyLocalPrefsFromInputs() {
@@ -795,37 +802,31 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
 
   async function beginHostedMatch() {
     if (!firebaseSession.isConnected() || state.mpMode !== "host") return;
-    if (!hasEnoughPlayers() || !areGuestsReady()) return;
-    if (!gameState) return;
-    updateMpStatus("Starting match...");
-    forceResetState(gameState);
-    setupSpawnConfirmations();
-    gameState.paused = false;
-    const startTs = Date.now();
-    state.lastMatchStartTs = startTs;
-    state.lobbyMeta = {
-      ...(state.lobbyMeta || {}),
-      status: "running",
-      startedAt: startTs,
-    };
-    updateLobbyUi();
-    setModeOverlayState("hidden");
-    clearResultState();
-    try {
-      state.showLobbyOnWaiting = false;
-      await broadcastSpawnSnapshot();
-      maybeSendLocalTrailSnapshot({ force: true, resetSeq: true });
-    } catch (e) {
-      console.warn("Spawn snapshot failed", e);
+    if (!hasEnoughPlayers() || !areGuestsReady()) {
+      updateMpError("Cannot start: not enough players or not all ready");
+      return;
     }
     try {
-      await firebaseSession.updateMeta({
-        status: "running",
-        startedAt: startTs,
-        lastResult: null,
-      });
+      await firebaseSession.updateMeta({ status: "playing", startedAt: Date.now() });
+      const spawnKey = await broadcastSpawnSnapshot();
+      state.pendingSpawnClientIds = new Set(
+        Object.values(state.lobbyPlayers || {})
+          .map((p) => p.id)
+          .filter((id) => id !== firebaseSession.getPlayerId())
+      );
+      
+      // Start countdown for host
+      setModeOverlayState("hidden");
+      // Host sets status to running immediately so guests see it, 
+      // but local pause is handled by countdown callback.
+      // Note: handleMetaChange will also trigger for host, so we need to be careful not to double countdown.
+      // Actually, handleMetaChange sees "running" and might trigger it too.
+      // Let's rely on handleMetaChange for consistency or just set it here.
+      // If we set it here, handleMetaChange might re-trigger.
+      // Let's just update meta and let handleMetaChange do the work for everyone including host.
+      
     } catch (e) {
-      updateMpError(`Failed to start match: ${e?.message || e}`);
+      console.warn("beginHostedMatch failed", e);
     }
   }
 
@@ -875,13 +876,22 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
       showMatchResult(result);
     }
     if ((state.mpMode === "host" || state.mpMode === "guest") && gameState) {
-      gameState.paused = status !== "running";
+      // If status is running, we might need to start countdown if we just transitioned
+      if (status === "running" && gameState.paused) {
+         // We are transitioning to running state
+         setModeOverlayState("hidden");
+         showCountdownOverlay(3, () => {
+            if (gameState) gameState.paused = false;
+         });
+      } else if (status !== "running") {
+         gameState.paused = true;
+      }
     }
     if (!state.hasSelectedMultiplayer) return;
     if (status === "running") {
       state.showLobbyOnWaiting = false;
       clearResultState();
-      setModeOverlayState("hidden");
+      // setModeOverlayState("hidden"); // Handled above with countdown
     } else if (
       (state.mpMode === "host" || state.mpMode === "guest") &&
       state.showLobbyOnWaiting

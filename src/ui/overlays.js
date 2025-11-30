@@ -303,16 +303,16 @@ export function openPlayerConfigMenu() {
       }
       try {
         window.playerConfigMenuOpen = false;
-        if (window.gameState) window.gameState.paused = false;
+        // if (window.gameState) window.gameState.paused = false; // Handled by countdown
       } catch (e) { }
       try {
         const el = document.getElementById("firstStartMenuOverlay");
         if (el && el.parentNode) el.parentNode.removeChild(el);
       } catch (e) { }
       try {
-        if (typeof window !== "undefined" && window.forceReset) {
-          window.forceReset();
-        }
+        // if (typeof window !== "undefined" && window.forceReset) {
+        //   window.forceReset();
+        // }
       } catch (e) {
         console.warn("Failed to start game after config update:", e);
       }
