@@ -8,7 +8,7 @@ export function updateControlsInfoUI(playersList) {
 
     const playerControls = document.createElement("div");
     playerControls.className = "player-controls compact-roster";
-    
+
     playersList.forEach((p) => {
       const div = document.createElement("div");
       div.className = `player-chip player${p.id}`;
@@ -22,7 +22,7 @@ export function updateControlsInfoUI(playersList) {
       const sw = document.createElement("span");
       sw.className = "swatch";
       sw.style.background = colorCss;
-      
+
       const nameSpan = document.createElement("span");
       nameSpan.className = "name";
       nameSpan.textContent = p.name;

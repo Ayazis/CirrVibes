@@ -47,7 +47,7 @@ export function showWinnerOverlay(player, onPlayAgain, options = {}) {
       btn.addEventListener("click", () => {
         try {
           document.body.removeChild(overlay);
-        } catch (e) {}
+        } catch (e) { }
         if (typeof onPlayAgain === "function") onPlayAgain();
       });
     }
@@ -91,7 +91,7 @@ export function showDrawOverlay(onPlayAgain, options = {}) {
       btn.addEventListener("click", () => {
         try {
           document.body.removeChild(overlay);
-        } catch (e) {}
+        } catch (e) { }
         if (typeof onPlayAgain === "function") onPlayAgain();
       });
     }
@@ -120,23 +120,29 @@ export function openPlayerConfigMenu() {
       try {
         window.playerConfigMenuOpen = true;
         if (window.gameState) window.gameState.paused = true;
-      } catch (e) {}
+      } catch (e) { }
       return;
     }
 
     const presets = [
       {
         name: "Player 1",
-        color: "#ff6666",
+        color: "#ff0808ff",
         controls: "ArrowLeft / ArrowRight",
       },
       {
         name: "Player 2",
-        color: "#6666ff",
+        color: "#8611b4ff",
         controls: "Mouse Left / Mouse Right",
       },
       { name: "Player 3", color: "#66ff66", controls: "A / D" },
-      { name: "Player 4", color: "#ffd166", controls: "Num4 / Num6" },
+      { name: "Player 4", color: "#ffffffff", controls: "Num4 / Num6" },
+      { name: "Player 5", color: "#4d96ff", controls: "J / L" },
+      { name: "Player 6", color: "rgba(255, 190, 237, 1)", controls: "I / K" },
+      { name: "Player 7", color: "#f77f00", controls: "T / G" },
+      { name: "Player 8", color: "#5ef1ff", controls: "F / H" },
+      { name: "Player 9", color: "#b19dff", controls: "V / B" },
+      { name: "Player 10", color: "#ffb347", controls: "N / M" },
     ];
 
     const saved = (() => {
@@ -298,11 +304,11 @@ export function openPlayerConfigMenu() {
       try {
         window.playerConfigMenuOpen = false;
         if (window.gameState) window.gameState.paused = false;
-      } catch (e) {}
+      } catch (e) { }
       try {
         const el = document.getElementById("firstStartMenuOverlay");
         if (el && el.parentNode) el.parentNode.removeChild(el);
-      } catch (e) {}
+      } catch (e) { }
       try {
         if (typeof window !== "undefined" && window.forceReset) {
           window.forceReset();
@@ -319,11 +325,11 @@ export function openPlayerConfigMenu() {
       try {
         window.playerConfigMenuOpen = false;
         if (window.gameState) window.gameState.paused = false;
-      } catch (e) {}
+      } catch (e) { }
       try {
         const el = document.getElementById("firstStartMenuOverlay");
         if (el && el.parentNode) el.parentNode.removeChild(el);
-      } catch (e) {}
+      } catch (e) { }
     });
 
     actions.appendChild(addBtn);
@@ -338,7 +344,7 @@ export function openPlayerConfigMenu() {
     try {
       window.playerConfigMenuOpen = true;
       if (window.gameState) window.gameState.paused = true;
-    } catch (e) {}
+    } catch (e) { }
     overlay.appendChild(menu);
     document.body.appendChild(overlay);
   } catch (err) {

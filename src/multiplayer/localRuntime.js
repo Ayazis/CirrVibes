@@ -182,7 +182,7 @@ export function createLocalRuntime({ gameState }) {
     let slot = 1;
     list.forEach((rp) => {
       if (rp.id === context.roomPlayerId) return;
-      if (slot >= 4) return;
+      if (slot >= 10) return;
       const cfg = {
         name: rp.name,
         color: rp.color,
@@ -206,7 +206,7 @@ export function createLocalRuntime({ gameState }) {
   function applyLocalRoster(rosterConfigs = []) {
     if (!gameState) return;
     if (!Array.isArray(rosterConfigs) || rosterConfigs.length === 0) return;
-    const configs = rosterConfigs.slice(0, 4);
+    const configs = rosterConfigs.slice(0, 10);
     const updatedPlayers = configs.map((cfg, idx) =>
       createPlayerFromConfig(cfg, idx),
     );
@@ -293,7 +293,7 @@ export function createLocalRuntime({ gameState }) {
     if (detachInput) {
       try {
         detachInput();
-      } catch (e) {}
+      } catch (e) { }
     }
     detachInput = attachInputHandlers(gameState);
   }
@@ -302,7 +302,7 @@ export function createLocalRuntime({ gameState }) {
     if (detachInput) {
       try {
         detachInput();
-      } catch (e) {}
+      } catch (e) { }
     }
     detachInput = attachInputHandlers(config);
   }
@@ -311,7 +311,7 @@ export function createLocalRuntime({ gameState }) {
     if (detachInput) {
       try {
         detachInput();
-      } catch (e) {}
+      } catch (e) { }
     }
     detachInput = null;
   }

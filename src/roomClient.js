@@ -69,7 +69,7 @@ export class RoomClient {
         hostId: this.playerId,
         createdAt: now,
         status: "waiting",
-        maxPlayers: 4,
+        maxPlayers: 10,
       });
     }
 
@@ -172,7 +172,7 @@ export class RoomClient {
     this._listeners.forEach((u) => {
       try {
         u();
-      } catch (e) {}
+      } catch (e) { }
     });
     this._listeners = [];
   }
