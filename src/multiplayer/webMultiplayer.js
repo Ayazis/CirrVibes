@@ -386,7 +386,10 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     for (let i = start; i < trail.length; i++) {
       const pt = trail.get(i, temp);
       if (!pt) continue;
-      out.push([pt.x, pt.y]);
+      // Preserve NaN coordinates so gaps are visible to remote clients
+      const x = Number.isFinite(pt.x) ? pt.x : NaN;
+      const y = Number.isFinite(pt.y) ? pt.y : NaN;
+      out.push([x, y]);
     }
     return out;
   }
@@ -415,9 +418,20 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
     for (let i = 0; i < points.length; i++) {
       const pair = points[i];
       if (!Array.isArray(pair)) continue;
-      const x = Number(pair[0]);
-      const y = Number(pair[1]);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const rawX = pair[0];
+      const rawY = pair[1];
+      const x = Number(rawX);
+      const y = Number(rawY);
+      // Allow NaN values to represent gaps — set them into the trail
+      if (!Number.isFinite(x) && !Number.isFinite(y)) {
+        player.trail.set(start + i, NaN, NaN);
+        continue;
+      }
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        // If one coord is invalid, set both to NaN to mark a gap
+        player.trail.set(start + i, NaN, NaN);
+        continue;
+      }
       player.trail.set(start + i, x, y);
     }
   }
@@ -456,6 +470,10 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         if (Number.isFinite(ly)) player.snakePosition.y = ly;
       }
     }
+      // Apply gap state sent by remote if present
+      if (typeof payload.isGap === 'boolean') {
+        player.isGap = !!payload.isGap;
+      }
     if (typeof payload.direction === "number") {
       player.snakeDirection = payload.direction;
     }
@@ -527,6 +545,7 @@ export function createWebMultiplayer({ gameState, localRuntime }) {
         points,
         direction: localPlayer.snakeDirection,
         isAlive: !!localPlayer.isAlive,
+        isGap: !!localPlayer.isGap,
         spawnKey: state.lastAppliedSpawnKey || null,
       })
       .catch((err) => {
